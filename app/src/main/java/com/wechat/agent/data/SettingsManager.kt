@@ -23,7 +23,7 @@ class SettingsManager(private val context: Context) {
         val USER_AVATAR_URI = stringPreferencesKey("user_avatar_uri")
 
         const val DEFAULT_API_URL = "https://api.deepseek.com/"
-        const val DEFAULT_MODEL = "deepseek-chat"
+        const val DEFAULT_MODEL = "deepseek-v4-flash"
 
         const val DEFAULT_AGENT_AVATAR = "🤖"
         const val DEFAULT_USER_AVATAR = "👤"
