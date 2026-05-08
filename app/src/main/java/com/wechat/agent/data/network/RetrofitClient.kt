@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    private var baseUrl: String = "https://api.openai.com/"
+    private var baseUrl: String = "https://api.deepseek.com/"
     private var retrofit: Retrofit? = null
     private var apiService: ApiService? = null
 

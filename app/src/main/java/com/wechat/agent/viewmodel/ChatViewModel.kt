@@ -9,9 +9,9 @@ import com.wechat.agent.data.model.Message
 import com.wechat.agent.data.model.MessageStatus
 import com.wechat.agent.data.model.Role
 import com.wechat.agent.data.repository.ChatRepository
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -34,7 +34,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _streamingContent = MutableStateFlow("")
     val streamingContent = _streamingContent.asStateFlow()
 
-    private var streamingJob: Job? = null
+    private var streamingJob: kotlinx.coroutines.Job? = null
 
     val currentChat: Chat?
         get() {
@@ -79,37 +79,40 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
 
+        streamingJob?.cancel()
+
         viewModelScope.launch {
             _isLoading.value = true
             _streamingContent.value = ""
 
-            val apiKey = getApiKey()
-            val model = getModelName()
-            val messagesToSend = buildMessageHistory()
+            try {
+                val apiKey = getApiKey()
+                val model = getModelName()
+                val messagesToSend = buildMessageHistory()
 
-            streamingJob = viewModelScope.launch {
-                try {
-                    repository.sendMessageStream(model, apiKey, messagesToSend)
-                        .collect { chunk ->
-                            _streamingContent.value += chunk
-                        }
-                } catch (e: Exception) {
-                    val errorMsg = Message(
-                        content = "错误: ${e.message}",
-                        role = Role.AGENT,
-                        status = MessageStatus.ERROR
-                    )
-                    finishStreaming(errorMsg.content, chatId, errorMsg.status)
-                    return@launch
+                repository.sendMessageStream(model, apiKey, messagesToSend)
+                    .collect { chunk ->
+                        _streamingContent.value += chunk
+                    }
+
+                val fullContent = _streamingContent.value
+                if (fullContent.isNotEmpty()) {
+                    finishStreaming(fullContent, chatId, MessageStatus.SENT)
+                } else {
+                    _isLoading.value = false
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                _isLoading.value = false
+                throw e
+            } catch (e: Exception) {
+                val errorMsg = Message(
+                    content = "错误: ${e.message}",
+                    role = Role.AGENT,
+                    status = MessageStatus.ERROR
+                )
+                finishStreaming(errorMsg.content, chatId, errorMsg.status)
             }
-            streamingJob?.join()
-
-            val fullContent = _streamingContent.value
-            if (fullContent.isNotEmpty()) {
-                finishStreaming(fullContent, chatId, MessageStatus.SENT)
-            }
-        }
+        }.also { streamingJob = it }
     }
 
     private fun finishStreaming(content: String, chatId: String, status: MessageStatus) {
@@ -147,15 +150,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun getApiKey(): String {
-        var key = ""
-        settingsManager.apiKey.collect { key = it }
-        return key
+        return settingsManager.apiKey.first()
     }
 
     private suspend fun getModelName(): String {
-        var model = SettingsManager.DEFAULT_MODEL
-        settingsManager.modelName.collect { model = it }
-        return model
+        return settingsManager.modelName.first()
     }
 
     fun deleteChat(chatId: String) {
