@@ -9,7 +9,7 @@ on:
 
 jobs:
   build:
-    name: Build Release APK
+    name: Build Debug APK
     runs-on: ubuntu-latest
 
     steps:
@@ -30,12 +30,12 @@ jobs:
       - name: Generate Gradle Wrapper
         run: gradle wrapper --gradle-version 8.11.1
 
-      - name: Build Release APK
-        run: ./gradlew assembleRelease
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: WeChatAgent-APK
-          path: app/build/outputs/apk/release/*.apk
+          path: app/build/outputs/apk/debug/*.apk
           retention-days: 30
