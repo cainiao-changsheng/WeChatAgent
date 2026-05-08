@@ -44,6 +44,4 @@ object RetrofitClient {
         }
         return apiService!!
     }
-
-    fun getOkHttpClient(): OkHttpClient = okHttpClient
 }
