@@ -1,12 +1,23 @@
 package com.wechat.agent.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -34,7 +45,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,7 +56,7 @@ import androidx.compose.ui.unit.dp
 import com.wechat.agent.ui.theme.WeChatGreen
 import com.wechat.agent.viewmodel.SettingsViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
@@ -52,11 +65,15 @@ fun SettingsScreen(
     val apiUrl by viewModel.apiUrl.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
     val modelName by viewModel.modelName.collectAsState()
+    val agentAvatar by viewModel.agentAvatar.collectAsState()
+    val userAvatar by viewModel.userAvatar.collectAsState()
     val saveSuccess by viewModel.saveSuccess.collectAsState()
 
     var urlInput by remember(apiUrl) { mutableStateOf(apiUrl) }
     var keyInput by remember(apiKey) { mutableStateOf(apiKey) }
     var modelInput by remember(modelName) { mutableStateOf(modelName) }
+    var selectedAgentAvatar by remember(agentAvatar) { mutableStateOf(agentAvatar) }
+    var selectedUserAvatar by remember(userAvatar) { mutableStateOf(userAvatar) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -67,10 +84,22 @@ fun SettingsScreen(
         }
     }
 
+    val avatarOptions = listOf(
+        "🤖", "🦾", "🧠", "⚡", "🔥", "💎", "🌟", "🎯",
+        "🐱", "🐶", "🦊", "🐼", "🐨", "🦄", "🐙", "👽",
+        "😎", "🤓", "🧑‍💻", "👩‍💻", "🦸", "🧙", "🧚", "👑"
+    )
+
+    val userAvatarOptions = listOf(
+        "👤", "😊", "🙂", "😎", "🤩", "🥳", "🤠", "👦",
+        "👧", "👨", "👩", "🧑", "👶", "🧒", "🧔", "👱",
+        "🐱", "🐶", "🐰", "🐻", "🦊", "🐸", "🐵", "🐯"
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("API 设置", fontWeight = FontWeight.Medium) },
+                title = { Text("设置", fontWeight = FontWeight.Medium) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -93,6 +122,7 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -100,25 +130,119 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "API 配置",
-                        style = MaterialTheme.typography.headlineMedium,
+                        text = "🤖 AI Agent 头像",
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    Spacer(modifier = Modifier.height(4.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        avatarOptions.forEach { avatar ->
+                            AvatarOption(
+                                avatar = avatar,
+                                selected = selectedAgentAvatar == avatar,
+                                onClick = { selectedAgentAvatar = avatar }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "支持 OpenAI 兼容的 API 接口",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        text = "👤 用户头像",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        userAvatarOptions.forEach { avatar ->
+                            AvatarOption(
+                                avatar = avatar,
+                                selected = selectedUserAvatar == avatar,
+                                onClick = { selectedUserAvatar = avatar }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    viewModel.saveAvatar(selectedAgentAvatar, selectedUserAvatar)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(8.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)
+            ) {
+                Text("保存头像设置", fontWeight = FontWeight.Medium)
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "⚡ API 配置",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(WeChatGreen.copy(alpha = 0.15f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "DeepSeek",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WeChatGreen,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "已预填 DeepSeek V3 API 地址和模型，只需输入 API Key",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
 
                     OutlinedTextField(
                         value = urlInput,
                         onValueChange = { urlInput = it },
                         label = { Text("API 地址") },
-                        placeholder = { Text("https://api.openai.com/") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
@@ -151,7 +275,6 @@ fun SettingsScreen(
                         value = modelInput,
                         onValueChange = { modelInput = it },
                         label = { Text("模型名称") },
-                        placeholder = { Text("gpt-3.5-turbo") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(
@@ -163,14 +286,17 @@ fun SettingsScreen(
                     Spacer(modifier = Modifier.height(20.dp))
 
                     Button(
-                        onClick = { viewModel.saveSettings(urlInput, keyInput, modelInput) },
+                        onClick = {
+                            viewModel.saveSettings(urlInput, keyInput, modelInput)
+                            viewModel.saveAvatar(selectedAgentAvatar, selectedUserAvatar)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)
                     ) {
-                        Text("保存设置", fontWeight = FontWeight.Medium)
+                        Text("保存全部设置", fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -184,25 +310,56 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "使用说明",
+                        text = "💡 使用说明",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "1. 在 API 地址中填入兼容 OpenAI 接口的服务地址\n" +
-                                "2. 填入你的 API 密钥\n" +
-                                "3. 选择或填入模型名称\n" +
-                                "4. 点击保存后即可开始对话\n\n" +
-                                "兼容的服务包括：\n" +
-                                "• OpenAI 官方 API\n" +
+                        text = "1. 前往 platform.deepseek.com 注册获取 API Key\n" +
+                                "2. 在下方输入你的 DeepSeek API 密钥\n" +
+                                "3. API 地址和模型名已预填，无需修改\n" +
+                                "4. 点击保存后即可开始对话\n" +
+                                "5. 顶部可选择 Agent 和用户头像\n\n" +
+                                "也支持其他 OpenAI 兼容服务：\n" +
+                                "• OpenAI 官方\n" +
                                 "• Azure OpenAI\n" +
-                                "• 各种兼容 OpenAI 接口的本地/第三方服务",
+                                "• 硅基流动 / 阿里百炼 等",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                     )
                 }
             }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+}
+
+@Composable
+fun AvatarOption(
+    avatar: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(
+                if (selected) WeChatGreen.copy(alpha = 0.15f)
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
+            .then(
+                if (selected) Modifier.border(2.dp, WeChatGreen, CircleShape)
+                else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = avatar,
+            fontSize = MaterialTheme.typography.titleLarge.fontSize
+        )
     }
 }

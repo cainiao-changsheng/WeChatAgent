@@ -49,6 +49,7 @@ import java.util.Locale
 @Composable
 fun ChatListScreen(
     chats: List<Chat>,
+    agentAvatar: String = "🤖",
     onChatClick: (String) -> Unit,
     onNewChat: () -> Unit,
     onDeleteChat: (String) -> Unit,
@@ -121,6 +122,7 @@ fun ChatListScreen(
                 items(chats, key = { it.id }) { chat ->
                     ChatListItem(
                         chat = chat,
+                        agentAvatar = agentAvatar,
                         onClick = { onChatClick(chat.id) },
                         onLongClick = { showDeleteDialog = chat.id }
                     )
@@ -154,6 +156,7 @@ fun ChatListScreen(
 @Composable
 fun ChatListItem(
     chat: Chat,
+    agentAvatar: String = "🤖",
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
@@ -181,7 +184,7 @@ fun ChatListItem(
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "🤖",
+                text = agentAvatar,
                 fontSize = MaterialTheme.typography.headlineMedium.fontSize
             )
         }

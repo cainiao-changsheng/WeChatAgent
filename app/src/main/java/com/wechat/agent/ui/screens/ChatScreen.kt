@@ -69,6 +69,8 @@ fun ChatScreen(
     messages: List<Message>,
     streamingContent: String,
     isLoading: Boolean,
+    agentAvatar: String = "🤖",
+    userAvatar: String = "👤",
     onBack: () -> Unit,
     onSendMessage: (String) -> Unit
 ) {
@@ -156,7 +158,9 @@ fun ChatScreen(
             items(messages, key = { it.id }) { message ->
                 MessageBubble(
                     message = message,
-                    isDark = isDark
+                    isDark = isDark,
+                    agentAvatar = agentAvatar,
+                    userAvatar = userAvatar
                 )
             }
 
@@ -168,7 +172,9 @@ fun ChatScreen(
                             role = Role.AGENT,
                             status = MessageStatus.SENDING
                         ),
-                        isDark = isDark
+                        isDark = isDark,
+                        agentAvatar = agentAvatar,
+                        userAvatar = userAvatar
                     )
                 }
             }
@@ -181,7 +187,12 @@ fun ChatScreen(
 }
 
 @Composable
-fun MessageBubble(message: Message, isDark: Boolean) {
+fun MessageBubble(
+    message: Message,
+    isDark: Boolean,
+    agentAvatar: String = "🤖",
+    userAvatar: String = "👤"
+) {
     val isUser = message.role == Role.USER
     val bubbleColor = when {
         isUser && isDark -> DarkSelfBubble
@@ -210,7 +221,7 @@ fun MessageBubble(message: Message, isDark: Boolean) {
                         .background(WeChatGreen),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("🤖", fontSize = MaterialTheme.typography.bodySmall.fontSize)
+                    Text(agentAvatar, fontSize = MaterialTheme.typography.bodySmall.fontSize)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
             }
@@ -265,7 +276,7 @@ fun MessageBubble(message: Message, isDark: Boolean) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "👤",
+                        userAvatar,
                         fontSize = MaterialTheme.typography.bodySmall.fontSize
                     )
                 }

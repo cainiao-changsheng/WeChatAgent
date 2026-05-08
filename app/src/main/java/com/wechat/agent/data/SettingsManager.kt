@@ -17,9 +17,14 @@ class SettingsManager(private val context: Context) {
         val API_URL = stringPreferencesKey("api_url")
         val API_KEY = stringPreferencesKey("api_key")
         val MODEL_NAME = stringPreferencesKey("model_name")
+        val AGENT_AVATAR = stringPreferencesKey("agent_avatar")
+        val USER_AVATAR = stringPreferencesKey("user_avatar")
 
-        const val DEFAULT_API_URL = "https://api.openai.com/"
-        const val DEFAULT_MODEL = "gpt-3.5-turbo"
+        const val DEFAULT_API_URL = "https://api.deepseek.com/"
+        const val DEFAULT_MODEL = "deepseek-chat"
+
+        const val DEFAULT_AGENT_AVATAR = "🤖"
+        const val DEFAULT_USER_AVATAR = "👤"
     }
 
     val apiUrl: Flow<String> = context.dataStore.data.map { preferences ->
@@ -34,11 +39,26 @@ class SettingsManager(private val context: Context) {
         preferences[MODEL_NAME] ?: DEFAULT_MODEL
     }
 
+    val agentAvatar: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[AGENT_AVATAR] ?: DEFAULT_AGENT_AVATAR
+    }
+
+    val userAvatar: Flow<String> = context.dataStore.data.map { preferences ->
+        preferences[USER_AVATAR] ?: DEFAULT_USER_AVATAR
+    }
+
     suspend fun saveApiSettings(url: String, key: String, model: String) {
         context.dataStore.edit { preferences ->
             preferences[API_URL] = url
             preferences[API_KEY] = key
             preferences[MODEL_NAME] = model
+        }
+    }
+
+    suspend fun saveAvatar(agent: String, user: String) {
+        context.dataStore.edit { preferences ->
+            preferences[AGENT_AVATAR] = agent
+            preferences[USER_AVATAR] = user
         }
     }
 }

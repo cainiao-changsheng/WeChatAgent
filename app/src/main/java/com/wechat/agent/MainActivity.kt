@@ -39,11 +39,14 @@ fun AppNavigation() {
     val currentMessages by chatViewModel.currentMessages.collectAsState()
     val streamingContent by chatViewModel.streamingContent.collectAsState()
     val isLoading by chatViewModel.isLoading.collectAsState()
+    val agentAvatar by settingsViewModel.agentAvatar.collectAsState()
+    val userAvatar by settingsViewModel.userAvatar.collectAsState()
 
     NavHost(navController = navController, startDestination = "chatList") {
         composable("chatList") {
             ChatListScreen(
                 chats = chats,
+                agentAvatar = agentAvatar,
                 onChatClick = { chatId ->
                     chatViewModel.selectChat(chatId)
                     navController.navigate("chat/$chatId")
@@ -69,6 +72,8 @@ fun AppNavigation() {
                 messages = currentMessages,
                 streamingContent = streamingContent,
                 isLoading = isLoading,
+                agentAvatar = agentAvatar,
+                userAvatar = userAvatar,
                 onBack = { navController.popBackStack() },
                 onSendMessage = { content ->
                     chatViewModel.sendMessage(content)

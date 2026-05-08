@@ -25,6 +25,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val modelName: StateFlow<String> = settingsManager.modelName
         .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_MODEL)
 
+    val agentAvatar: StateFlow<String> = settingsManager.agentAvatar
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_AGENT_AVATAR)
+
+    val userAvatar: StateFlow<String> = settingsManager.userAvatar
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_USER_AVATAR)
+
     private val _saveSuccess = MutableStateFlow(false)
     val saveSuccess: StateFlow<Boolean> = _saveSuccess.asStateFlow()
 
@@ -32,6 +38,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             settingsManager.saveApiSettings(url, key, model)
             RetrofitClient.updateBaseUrl(url)
+            _saveSuccess.value = true
+        }
+    }
+
+    fun saveAvatar(agent: String, user: String) {
+        viewModelScope.launch {
+            settingsManager.saveAvatar(agent, user)
             _saveSuccess.value = true
         }
     }
