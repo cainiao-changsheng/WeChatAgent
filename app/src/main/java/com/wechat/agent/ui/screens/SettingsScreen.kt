@@ -48,9 +48,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -88,8 +90,7 @@ fun SettingsScreen(
 
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(apiUrl, agentAvatar, userAvatar, agentAvatarUri, userAvatarUri) {}
+    val scope = rememberCoroutineScope()
 
     val agentGalleryLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
@@ -189,8 +190,11 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = { viewModel.saveAvatarUri(agentPhotoUri, userPhotoUri); viewModel.saveAvatar(selectedAgentAvatar, selectedUserAvatar);
-                    snackbarHostState.showSnackbar("头像已保存") },
+                onClick = {
+                    viewModel.saveAvatarUri(agentPhotoUri, userPhotoUri)
+                    viewModel.saveAvatar(selectedAgentAvatar, selectedUserAvatar)
+                    scope.launch { snackbarHostState.showSnackbar("头像已保存") }
+                },
                 modifier = Modifier.fillMaxWidth().height(44.dp),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)
@@ -275,7 +279,7 @@ fun SettingsScreen(
                         viewModel.saveSettings(urlInput, keyInput, modelInput)
                         viewModel.saveAvatarUri(agentPhotoUri, userPhotoUri)
                         viewModel.saveAvatar(selectedAgentAvatar, selectedUserAvatar)
-                        snackbarHostState.showSnackbar("全部设置已保存")
+                        scope.launch { snackbarHostState.showSnackbar("全部设置已保存") }
                     }, modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)) {
