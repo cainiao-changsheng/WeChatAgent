@@ -3,7 +3,6 @@ package com.wechat.agent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -39,14 +38,19 @@ fun AppNavigation() {
     val currentMessages by chatViewModel.currentMessages.collectAsState()
     val streamingContent by chatViewModel.streamingContent.collectAsState()
     val isLoading by chatViewModel.isLoading.collectAsState()
+    val emotionState by chatViewModel.emotionState.collectAsState()
+    val moodText by chatViewModel.moodText.collectAsState()
     val agentAvatar by settingsViewModel.agentAvatar.collectAsState()
     val userAvatar by settingsViewModel.userAvatar.collectAsState()
+    val agentAvatarUri by settingsViewModel.agentAvatarUri.collectAsState()
+    val userAvatarUri by settingsViewModel.userAvatarUri.collectAsState()
 
     NavHost(navController = navController, startDestination = "chatList") {
         composable("chatList") {
             ChatListScreen(
                 chats = chats,
                 agentAvatar = agentAvatar,
+                agentAvatarUri = agentAvatarUri,
                 onChatClick = { chatId ->
                     chatViewModel.selectChat(chatId)
                     navController.navigate("chat/$chatId")
@@ -55,12 +59,8 @@ fun AppNavigation() {
                     val newId = chatViewModel.createNewChat()
                     navController.navigate("chat/$newId")
                 },
-                onDeleteChat = { chatId ->
-                    chatViewModel.deleteChat(chatId)
-                },
-                onNavigateToSettings = {
-                    navController.navigate("settings")
-                }
+                onDeleteChat = { chatId -> chatViewModel.deleteChat(chatId) },
+                onNavigateToSettings = { navController.navigate("settings") }
             )
         }
 
@@ -74,18 +74,16 @@ fun AppNavigation() {
                 isLoading = isLoading,
                 agentAvatar = agentAvatar,
                 userAvatar = userAvatar,
+                agentAvatarUri = agentAvatarUri,
+                userAvatarUri = userAvatarUri,
+                moodText = moodText,
                 onBack = { navController.popBackStack() },
-                onSendMessage = { content ->
-                    chatViewModel.sendMessage(content)
-                }
+                onSendMessage = { content -> chatViewModel.sendMessage(content) }
             )
         }
 
         composable("settings") {
-            SettingsScreen(
-                viewModel = settingsViewModel,
-                onBack = { navController.popBackStack() }
-            )
+            SettingsScreen(viewModel = settingsViewModel, onBack = { navController.popBackStack() })
         }
     }
 }

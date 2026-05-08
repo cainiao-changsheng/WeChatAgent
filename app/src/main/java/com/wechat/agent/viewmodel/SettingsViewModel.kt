@@ -1,6 +1,7 @@
 package com.wechat.agent.viewmodel
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wechat.agent.data.SettingsManager
@@ -31,6 +32,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val userAvatar: StateFlow<String> = settingsManager.userAvatar
         .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_USER_AVATAR)
 
+    val agentAvatarUri: StateFlow<String> = settingsManager.agentAvatarUri
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
+    val userAvatarUri: StateFlow<String> = settingsManager.userAvatarUri
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
     private val _saveSuccess = MutableStateFlow(false)
     val saveSuccess: StateFlow<Boolean> = _saveSuccess.asStateFlow()
 
@@ -45,6 +52,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun saveAvatar(agent: String, user: String) {
         viewModelScope.launch {
             settingsManager.saveAvatar(agent, user)
+            _saveSuccess.value = true
+        }
+    }
+
+    fun saveAvatarUri(agentUri: String, userUri: String) {
+        viewModelScope.launch {
+            settingsManager.saveAvatarUri(agentUri, userUri)
             _saveSuccess.value = true
         }
     }

@@ -3,21 +3,31 @@ package com.wechat.agent.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.wechat.agent.data.EmotionEngine
+import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.model.Chat
+import com.wechat.agent.data.model.EmotionState
+import com.wechat.agent.data.model.MemoryEntry
+import com.wechat.agent.data.model.MemoryType
 import com.wechat.agent.data.model.Message
 import com.wechat.agent.data.model.MessageStatus
+import com.wechat.agent.data.model.Mood
 import com.wechat.agent.data.model.Role
 import com.wechat.agent.data.repository.ChatRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.util.Calendar
+import java.util.UUID
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val settingsManager = SettingsManager(application)
-    private val repository = ChatRepository()
+    private val memoryManager = MemoryManager(application)
+    private val emotionEngine = EmotionEngine(memoryManager)
+    private val repository = ChatRepository(memoryManager)
 
     private val _chats = MutableStateFlow<List<Chat>>(emptyList())
     val chats = _chats.asStateFlow()
@@ -34,7 +44,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _streamingContent = MutableStateFlow("")
     val streamingContent = _streamingContent.asStateFlow()
 
+    private val _emotionState = MutableStateFlow(EmotionState())
+    val emotionState = _emotionState.asStateFlow()
+
+    private val _moodText = MutableStateFlow("")
+    val moodText = _moodText.asStateFlow()
+
     private var streamingJob: kotlinx.coroutines.Job? = null
+
+    init {
+        viewModelScope.launch {
+            _emotionState.value = memoryManager.loadEmotion()
+            _moodText.value = emotionEngine.getMoodDescription(
+                _emotionState.value.mood, _emotionState.value.affinity
+            )
+        }
+    }
 
     val currentChat: Chat?
         get() {
@@ -80,24 +105,77 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         streamingJob?.cancel()
-
-        viewModelScope.launch {
+        streamingJob = viewModelScope.launch {
             _isLoading.value = true
             _streamingContent.value = ""
 
             try {
                 val apiKey = getApiKey()
                 val model = getModelName()
-                val messagesToSend = buildMessageHistory()
+                val state = _emotionState.value
 
-                repository.sendMessageStream(model, apiKey, messagesToSend)
+                val userEmotion = emotionEngine.analyzeEmotion(content)
+                val newState = emotionEngine.updateAffinity(state, userEmotion)
+                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                val newMood = emotionEngine.deriveMood(newState, userEmotion, hour)
+                val finalState = newState.copy(
+                    mood = newMood,
+                    lastInteraction = System.currentTimeMillis(),
+                    todayTopicCount = state.todayTopicCount + 1
+                )
+                _emotionState.value = finalState
+                _moodText.value = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
+                memoryManager.saveEmotion(finalState)
+
+                val emotionDesc = "好感度${finalState.affinity}/100·${finalState.mood.label}"
+                val moodDesc = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
+
+                val chatMessages = repository.buildChatMessages(
+                    model, _currentMessages.value, emotionDesc, moodDesc
+                )
+
+                var fullReply = ""
+                repository.sendMessageStream(model, apiKey, chatMessages)
                     .collect { chunk ->
-                        _streamingContent.value += chunk
+                        fullReply += chunk
+                        _streamingContent.value = fullReply
                     }
 
-                val fullContent = _streamingContent.value
-                if (fullContent.isNotEmpty()) {
-                    finishStreaming(fullContent, chatId, MessageStatus.SENT)
+                if (fullReply.isNotEmpty()) {
+                    finishStreaming(fullReply, chatId, MessageStatus.SENT)
+
+                    memoryManager.addMemory(MemoryEntry(
+                        id = UUID.randomUUID().toString(),
+                        type = MemoryType.L0_INSTANT,
+                        content = "对方说: $content → 你回复: ${fullReply.take(80)}",
+                        emotion = userEmotion,
+                        importance = 2
+                    ))
+
+                    if (userEmotion in listOf("very_warm", "warm") || finalState.affinity > 60) {
+                        memoryManager.addGrowthMemory(
+                            "对方说过温暖的话: ${content.take(80)}",
+                            userEmotion,
+                            importance = 4
+                        )
+                    }
+
+                    viewModelScope.launch {
+                        try {
+                            val reflection = repository.backgroundReflection(
+                                model, apiKey, content, fullReply
+                            )
+                            if (!reflection.isNullOrBlank()) {
+                                memoryManager.addMemory(MemoryEntry(
+                                    id = UUID.randomUUID().toString(),
+                                    type = MemoryType.L1_DAILY,
+                                    content = "自我复盘: ${reflection.take(120)}",
+                                    emotion = _emotionState.value.mood.label,
+                                    importance = 3
+                                ))
+                            }
+                        } catch (_: Exception) {}
+                    }
                 } else {
                     _isLoading.value = false
                 }
@@ -106,13 +184,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 throw e
             } catch (e: Exception) {
                 val errorMsg = Message(
-                    content = "错误: ${e.message}",
+                    content = "唔...网络好像不太对劲，等会儿再试试？(${e.message?.take(40)})",
                     role = Role.AGENT,
                     status = MessageStatus.ERROR
                 )
                 finishStreaming(errorMsg.content, chatId, errorMsg.status)
             }
-        }.also { streamingJob = it }
+        }
     }
 
     private fun finishStreaming(content: String, chatId: String, status: MessageStatus) {
@@ -135,27 +213,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _isLoading.value = false
     }
 
-    private fun buildMessageHistory(): List<Message> {
-        val history = mutableListOf<Message>()
-        history.add(Message(
-            content = "你是一个智能AI助手，请简洁、友好地回答用户的问题。",
-            role = Role.USER
-        ))
-        history.add(Message(
-            content = "好的，我会简洁友好地回答用户的问题。",
-            role = Role.AGENT
-        ))
-        history.addAll(_currentMessages.value.takeLast(20))
-        return history
-    }
+    private suspend fun getApiKey(): String = settingsManager.apiKey.first()
 
-    private suspend fun getApiKey(): String {
-        return settingsManager.apiKey.first()
-    }
-
-    private suspend fun getModelName(): String {
-        return settingsManager.modelName.first()
-    }
+    private suspend fun getModelName(): String = settingsManager.modelName.first()
 
     fun deleteChat(chatId: String) {
         _chats.value = _chats.value.filter { it.id != chatId }
