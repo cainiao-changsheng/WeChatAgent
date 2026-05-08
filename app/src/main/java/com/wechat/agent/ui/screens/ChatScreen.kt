@@ -1,0 +1,337 @@
+package com.wechat.agent.ui.screens
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.dp
+import com.wechat.agent.data.model.Message
+import com.wechat.agent.data.model.MessageStatus
+import com.wechat.agent.data.model.Role
+import com.wechat.agent.ui.theme.DarkOtherBubble
+import com.wechat.agent.ui.theme.DarkSelfBubble
+import com.wechat.agent.ui.theme.OtherBubble
+import com.wechat.agent.ui.theme.SelfBubble
+import com.wechat.agent.ui.theme.WeChatGreen
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatScreen(
+    chatTitle: String,
+    messages: List<Message>,
+    streamingContent: String,
+    isLoading: Boolean,
+    onBack: () -> Unit,
+    onSendMessage: (String) -> Unit
+) {
+    var inputText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val isDark = MaterialTheme.colorScheme.background == Color(0xFF191919)
+
+    LaunchedEffect(messages.size, streamingContent) {
+        if (messages.isNotEmpty() || streamingContent.isNotEmpty()) {
+            listState.animateScrollToItem(maxOf(0, messages.size))
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = chatTitle,
+                            fontWeight = FontWeight.Medium
+                        )
+                        if (isLoading) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = WeChatGreen
+                            )
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "返回"
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        },
+        bottomBar = {
+            ChatInputBar(
+                inputText = inputText,
+                onInputChange = { inputText = it },
+                onSend = {
+                    if (inputText.isNotBlank()) {
+                        onSendMessage(inputText.trim())
+                        inputText = ""
+                    }
+                },
+                enabled = !isLoading
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background),
+            state = listState,
+            reverseLayout = false
+        ) {
+            if (messages.isEmpty() && streamingContent.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "发送一条消息开始对话 👋",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                        )
+                    }
+                }
+            }
+
+            items(messages, key = { it.id }) { message ->
+                MessageBubble(
+                    message = message,
+                    isDark = isDark
+                )
+            }
+
+            if (streamingContent.isNotEmpty()) {
+                item {
+                    MessageBubble(
+                        message = Message(
+                            content = streamingContent,
+                            role = Role.AGENT,
+                            status = MessageStatus.SENDING
+                        ),
+                        isDark = isDark
+                    )
+                }
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        }
+    }
+}
+
+@Composable
+fun MessageBubble(message: Message, isDark: Boolean) {
+    val isUser = message.role == Role.USER
+    val bubbleColor = when {
+        isUser && isDark -> DarkSelfBubble
+        isUser && !isDark -> SelfBubble
+        !isUser && isDark -> DarkOtherBubble
+        else -> OtherBubble
+    }
+
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 8 })
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp),
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+        ) {
+            if (!isUser) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(WeChatGreen),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("🤖", fontSize = MaterialTheme.typography.bodySmall.fontSize)
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+            }
+
+            Column(
+                horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
+                modifier = Modifier.widthIn(max = 280.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(
+                            topStart = if (isUser) 16.dp else 4.dp,
+                            topEnd = if (isUser) 4.dp else 16.dp,
+                            bottomStart = 16.dp,
+                            bottomEnd = 16.dp
+                        ))
+                        .background(bubbleColor)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (isUser && !isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (message.status == MessageStatus.ERROR) {
+                        Text(
+                            text = "⚠ 发送失败",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Text(
+                        text = timeFormat.format(Date(message.timestamp)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f)
+                    )
+                }
+            }
+
+            if (isUser) {
+                Spacer(modifier = Modifier.width(8.dp))
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "👤",
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ChatInputBar(
+    inputText: String,
+    onInputChange: (String) -> Unit,
+    onSend: () -> Unit,
+    enabled: Boolean
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = inputText,
+            onValueChange = onInputChange,
+            modifier = Modifier.weight(1f),
+            placeholder = {
+                Text(
+                    "输入消息...",
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                )
+            },
+            shape = RoundedCornerShape(24.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = WeChatGreen,
+                unfocusedBorderColor = Color.Transparent,
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant
+            ),
+            maxLines = 4,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { onSend() }),
+            enabled = enabled
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        IconButton(
+            onClick = onSend,
+            enabled = enabled && inputText.isNotBlank(),
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(
+                    if (inputText.isNotBlank() && enabled) WeChatGreen
+                    else MaterialTheme.colorScheme.surfaceVariant
+                )
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Send,
+                contentDescription = "发送",
+                tint = if (inputText.isNotBlank() && enabled) Color.White
+                       else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+            )
+        }
+    }
+}
+
+
