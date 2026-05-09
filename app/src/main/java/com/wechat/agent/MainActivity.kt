@@ -48,6 +48,7 @@ fun AppNavigation() {
     val userAvatarUri by settingsViewModel.userAvatarUri.collectAsState()
     val momentPosts by momentsViewModel.posts.collectAsState()
     val momentIsLoading by momentsViewModel.isLoading.collectAsState()
+    val nowPlaying by chatViewModel.nowPlaying.collectAsState()
 
     NavHost(navController = navController, startDestination = "chatList") {
         composable("chatList") {
@@ -82,8 +83,14 @@ fun AppNavigation() {
                 agentAvatarUri = agentAvatarUri,
                 userAvatarUri = userAvatarUri,
                 moodText = moodText,
+                nowPlaying = nowPlaying,
                 onBack = { navController.popBackStack() },
-                onSendMessage = { content -> chatViewModel.sendMessage(content) }
+                onSendMessage = { content -> chatViewModel.sendMessage(content) },
+                onPlayMusic = { chatViewModel.playMusic() },
+                onPauseMusic = { chatViewModel.pauseMusic() },
+                onSkipNext = { chatViewModel.skipNextMusic() },
+                onSkipPrev = { chatViewModel.skipPrevMusic() },
+                onOpenMusicApp = { chatViewModel.openMusicApp() }
             )
         }
 

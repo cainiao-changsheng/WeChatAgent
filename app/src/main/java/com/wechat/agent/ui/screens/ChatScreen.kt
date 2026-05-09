@@ -5,6 +5,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -56,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.model.Message
 import com.wechat.agent.data.model.MessageStatus
 import com.wechat.agent.data.model.Role
@@ -80,8 +87,14 @@ fun ChatScreen(
     agentAvatarUri: String = "",
     userAvatarUri: String = "",
     moodText: String = "",
+    nowPlaying: MusicController.NowPlaying = MusicController.NowPlaying(),
     onBack: () -> Unit,
-    onSendMessage: (String) -> Unit
+    onSendMessage: (String) -> Unit,
+    onPlayMusic: () -> Unit = {},
+    onPauseMusic: () -> Unit = {},
+    onSkipNext: () -> Unit = {},
+    onSkipPrev: () -> Unit = {},
+    onOpenMusicApp: () -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -111,13 +124,32 @@ fun ChatScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
+                actions = {
+                    IconButton(onClick = onOpenMusicApp) {
+                        Icon(Icons.Default.MusicNote, contentDescription = "打开音乐",
+                            tint = WeChatGreen, modifier = Modifier.size(22.dp))
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
+
         bottomBar = {
-            ChatInputBar(inputText = inputText, onInputChange = { inputText = it },
-                onSend = { if (inputText.isNotBlank()) { onSendMessage(inputText.trim()); inputText = "" } },
-                enabled = !isLoading)
+            Column {
+                if (nowPlaying.title.isNotEmpty()) {
+                    MusicControlBar(
+                        nowPlaying = nowPlaying,
+                        onPlay = onPlayMusic,
+                        onPause = onPauseMusic,
+                        onSkipNext = onSkipNext,
+                        onSkipPrev = onSkipPrev,
+                        onOpenApp = onOpenMusicApp
+                    )
+                }
+                ChatInputBar(inputText = inputText, onInputChange = { inputText = it },
+                    onSend = { if (inputText.isNotBlank()) { onSendMessage(inputText.trim()); inputText = "" } },
+                    enabled = !isLoading)
+            }
         }
     ) { padding ->
         LazyColumn(
@@ -261,6 +293,67 @@ fun ChatInputBar(inputText: String, onInputChange: (String) -> Unit, onSend: () 
             Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送",
                 tint = if (inputText.isNotBlank() && enabled) Color.White
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+        }
+    }
+}
+
+@Composable
+fun MusicControlBar(
+    nowPlaying: MusicController.NowPlaying,
+    onPlay: () -> Unit,
+    onPause: () -> Unit,
+    onSkipNext: () -> Unit,
+    onSkipPrev: () -> Unit,
+    onOpenApp: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .clickable(onClick = onOpenApp)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.MusicNote,
+            contentDescription = "",
+            tint = WeChatGreen,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = nowPlaying.title.ifEmpty { "未知歌曲" },
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (nowPlaying.artist.isNotEmpty()) {
+                Text(
+                    text = nowPlaying.artist,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    maxLines = 1
+                )
+            }
+        }
+        IconButton(onClick = onSkipPrev, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.SkipPrevious, contentDescription = "上一首", modifier = Modifier.size(20.dp))
+        }
+        IconButton(
+            onClick = if (nowPlaying.isPlaying) onPause else onPlay,
+            modifier = Modifier.size(32.dp)
+        ) {
+            Icon(
+                imageVector = if (nowPlaying.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (nowPlaying.isPlaying) "暂停" else "播放",
+                tint = WeChatGreen,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        IconButton(onClick = onSkipNext, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Default.SkipNext, contentDescription = "下一首", modifier = Modifier.size(20.dp))
         }
     }
 }
