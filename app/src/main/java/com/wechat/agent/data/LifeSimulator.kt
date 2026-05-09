@@ -92,7 +92,7 @@ class LifeSimulator(private val prefs: SharedPreferences, private val memoryMana
         if (elapsedMinutes < INTERVAL_MINUTES) return 0
 
         val effectiveMinutes = countActiveMinutes(lastSimTime, now)
-        return (effectiveMinutes / INTERVAL_MINUTES).coerceAtMost(60)
+        return (effectiveMinutes / INTERVAL_MINUTES).toInt().coerceAtMost(60)
     }
 
     private fun countActiveMinutes(from: Long, to: Long): Long {

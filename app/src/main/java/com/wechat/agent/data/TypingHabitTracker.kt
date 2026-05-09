@@ -42,7 +42,7 @@ class TypingHabitTracker(private val prefs: SharedPreferences) {
             text.contains("！") || text.contains("!") -> "excited"
             text.contains("～") || text.contains("~") -> "soft"
             text.contains("…") || text.contains("...") -> "hesitant"
-            !text.any { c in "。！？.!?" } -> "loose"
+            !text.any { it in "\u3002\uFF01\uFF1F.!?" } -> "loose"
             else -> prefs.getString(KEY_PUNCT_STYLE, "mixed") ?: "mixed"
         }
 
@@ -123,8 +123,8 @@ class TypingHabitTracker(private val prefs: SharedPreferences) {
             } else {
                 var remaining = seg
                 while (remaining.length > style.maxLen) {
-                    val cutPoint = remaining.indexOfAny("，, ", style.maxLen - 10)
-                        .let { if (it in 1..style.maxLen) it else style.maxLen }
+                    val cutPoint = remaining.indexOfAny(charArrayOf('，', ',', ' '), style.maxLen - 10)
+                        .let { if (it >= 1 && it <= style.maxLen) it else style.maxLen }
                     messages.add(remaining.substring(0, cutPoint).trim())
                     remaining = remaining.substring(cutPoint).trim()
                 }
@@ -161,7 +161,7 @@ class TypingHabitTracker(private val prefs: SharedPreferences) {
             appendLine("1. 每条消息不超过${style.maxLen}个字，像真人聊微信一样短")
             appendLine("2. 长回复必须拆成多条短消息发出，每条${style.avgLen}字左右")
             appendLine("3. 绝对禁止用 *动作描写* 【心理描写】 （括号描写） 任何非对话内容")
-            appendLine("4. 禁止 "作为AI" "请注意" "根据对话" 等AI腔")
+            appendLine("4. 禁止 \\\"作为AI\\\" \\\"请注意\\\" \\\"根据对话\\\" 等AI腔")
             appendLine("5. $punctRule")
             appendLine("6. 用 \\n\\n 分隔要发多条消息的内容（不能用\\n\\n就自然断开）")
             appendLine("7. 禁止写超过2行的长段落")
