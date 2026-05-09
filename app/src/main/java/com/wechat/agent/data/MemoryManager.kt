@@ -94,6 +94,21 @@ class MemoryManager(context: Context) {
         addMemory(entry)
     }
 
+    fun addMemorySync(entry: MemoryEntry) {
+        val list = loadMemory(entry.type).toMutableList()
+        list.add(0, entry)
+        if (entry.type == MemoryType.L0_INSTANT && list.size > 30) {
+            list.retainAll(list.take(25))
+        }
+        if (entry.type == MemoryType.L1_DAILY && list.size > 50) {
+            list.retainAll(list.take(40))
+        }
+        if (entry.type == MemoryType.L2_GROWTH && list.size > 200) {
+            list.retainAll(list.take(150))
+        }
+        saveMemory(entry.type, list)
+    }
+
     suspend fun buildMemoryContext(maxTokens: Int = 2000): String = mutex.withLock {
         val sb = StringBuilder()
         val l2 = loadMemory(MemoryType.L2_GROWTH).filter { it.importance >= 3 }.take(8)

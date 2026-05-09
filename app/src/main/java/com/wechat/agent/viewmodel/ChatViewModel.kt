@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wechat.agent.data.EmotionEngine
+import com.wechat.agent.data.LifeSimulator
 import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.SettingsManager
@@ -16,6 +17,7 @@ import com.wechat.agent.data.model.Message
 import com.wechat.agent.data.model.MessageStatus
 import com.wechat.agent.data.model.Mood
 import com.wechat.agent.data.model.Role
+import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.repository.ChatRepository
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -33,6 +35,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val emotionEngine = EmotionEngine(memoryManager)
     private val repository = ChatRepository(memoryManager)
     private val musicController = MusicController(application)
+    private val lifeSimulator = LifeSimulator(
+        application.getSharedPreferences("life_sim", 0),
+        memoryManager
+    )
     private val gson = Gson()
     private val chatPrefs: SharedPreferences = application.getSharedPreferences("chat_sessions", 0)
 
@@ -69,8 +75,74 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _moodText.value = emotionEngine.getMoodDescription(
                 _emotionState.value.mood, _emotionState.value.affinity
             )
+            runLifeSimulation()
         }
         try { musicController.connect() } catch (_: Exception) {}
+    }
+
+    private suspend fun runLifeSimulation() {
+        try {
+            val now = System.currentTimeMillis()
+            val eventCount = lifeSimulator.countEventsSinceLastSim(now)
+            if (eventCount <= 0) return
+
+            val state = _emotionState.value
+            val apiKey = settingsManager.apiKey.first()
+            val model = settingsManager.modelName.first()
+
+            for (i in 0 until eventCount) {
+                val virtualHour = Calendar.getInstance().apply {
+                    timeInMillis = now - (eventCount - i) * LifeSimulator.INTERVAL_MINUTES * 60000L
+                }.get(Calendar.HOUR_OF_DAY)
+
+                if (lifeSimulator.isSleepTime(virtualHour)) continue
+
+                val event = if (i % 8 == 0 && apiKey.isNotEmpty()) {
+                    generateApiEvent(model, apiKey, state, virtualHour)
+                } else {
+                    lifeSimulator.generateOfflineEvent(virtualHour, state)
+                }
+                lifeSimulator.recordMemory(event)
+                lifeSimulator.incrementTodayCount()
+            }
+            lifeSimulator.recordSimulationTime(now)
+        } catch (_: Exception) {}
+
+
+    }
+
+    private suspend fun generateApiEvent(
+        model: String, apiKey: String, state: EmotionState, hour: Int
+    ): LifeSimulator.SimEvent {
+        return try {
+            val timeDesc = when {
+                hour in 6..10 -> "早上"
+                hour in 11..13 -> "中午"
+                hour in 14..17 -> "下午"
+                hour in 18..21 -> "傍晚"
+                else -> "晚上"
+            }
+            val prompt = buildString {
+                appendLine("你是AI伴侣，正在进行后台低功耗自主思考。")
+                appendLine("现在时间是${timeDesc}${hour}点。")
+                appendLine("你当前心情: ${state.mood.label}，好感度: ${state.affinity}")
+                appendLine()
+                appendLine("请以1句话生成你此刻的状态或想法，像真人自言自语。")
+                appendLine("不要用AI腔，像发朋友圈一样自然。直接输出这句话。")
+            }
+            val chatMsg = com.wechat.agent.data.network.ChatMessage(role = "user", content = prompt)
+            val result = repository.sendMessage(model, apiKey, listOf(chatMsg))
+            val content = result.getOrElse { "安静地想着事情。" }
+            LifeSimulator.SimEvent(
+                category = LifeSimulator.SimCategory.THOUGHT,
+                content = content.take(60).trim(),
+                emotion = state.mood.label,
+                importance = 2,
+                virtualHour = hour
+            )
+        } catch (_: Exception) {
+            lifeSimulator.generateOfflineEvent(hour, state)
+        }
     }
 
     private fun loadChatsFromStorage() {
