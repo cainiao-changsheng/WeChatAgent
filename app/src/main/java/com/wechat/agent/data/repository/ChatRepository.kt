@@ -13,6 +13,8 @@ import java.io.InputStreamReader
 
 class ChatRepository(private val memoryManager: MemoryManager) {
 
+    var formatRule: String = ""
+
     suspend fun buildChatMessages(
         model: String,
         messages: List<com.wechat.agent.data.model.Message>,
@@ -25,6 +27,10 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         val systemPrompt = buildString {
             appendLine(identity)
             appendLine()
+            if (formatRule.isNotEmpty()) {
+                appendLine(formatRule)
+                appendLine()
+            }
             if (memoryContext.isNotBlank()) {
                 appendLine(memoryContext)
             }

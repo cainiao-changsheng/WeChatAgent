@@ -16,7 +16,6 @@ import com.wechat.agent.ui.screens.MomentsScreen
 import com.wechat.agent.ui.screens.SettingsScreen
 import com.wechat.agent.ui.theme.WeChatAgentTheme
 import com.wechat.agent.viewmodel.ChatViewModel
-import com.wechat.agent.viewmodel.MomentsViewModel
 import com.wechat.agent.viewmodel.SettingsViewModel
 
 class MainActivity : ComponentActivity() {
@@ -35,7 +34,6 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val chatViewModel: ChatViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
-    val momentsViewModel: MomentsViewModel = viewModel()
 
     val chats by chatViewModel.chats.collectAsState()
     val currentMessages by chatViewModel.currentMessages.collectAsState()
@@ -46,46 +44,32 @@ fun AppNavigation() {
     val userAvatar by settingsViewModel.userAvatar.collectAsState()
     val agentAvatarUri by settingsViewModel.agentAvatarUri.collectAsState()
     val userAvatarUri by settingsViewModel.userAvatarUri.collectAsState()
-    val momentPosts by momentsViewModel.posts.collectAsState()
-    val momentIsLoading by momentsViewModel.isLoading.collectAsState()
     val nowPlaying by chatViewModel.nowPlaying.collectAsState()
+    val momentPosts by chatViewModel.momentsPosts.collectAsState()
 
     NavHost(navController = navController, startDestination = "chatList") {
         composable("chatList") {
             ChatListScreen(
-                chats = chats,
-                agentAvatar = agentAvatar,
-                agentAvatarUri = agentAvatarUri,
-                onChatClick = { chatId ->
-                    chatViewModel.selectChat(chatId)
-                    navController.navigate("chat/$chatId")
-                },
-                onNewChat = {
-                    val newId = chatViewModel.createNewChat()
-                    navController.navigate("chat/$newId")
-                },
-                onDeleteChat = { chatId -> chatViewModel.deleteChat(chatId) },
+                chats = chats, agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
+                onChatClick = { chatId -> chatViewModel.selectChat(chatId); navController.navigate("chat/$chatId") },
+                onNewChat = { navController.navigate("chat/${chatViewModel.createNewChat()}") },
+                onDeleteChat = { chatViewModel.deleteChat(it) },
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToMoments = { navController.navigate("moments") }
             )
         }
 
         composable("chat/{chatId}") { backStackEntry ->
-            val chatId = backStackEntry.arguments?.getString("chatId") ?: return@composable
-            val chat = chats.find { it.id == chatId }
+            val id = backStackEntry.arguments?.getString("chatId") ?: return@composable
+            val chat = chats.find { it.id == id }
             ChatScreen(
-                chatTitle = chat?.title ?: "对话",
-                messages = currentMessages,
-                streamingContent = streamingContent,
-                isLoading = isLoading,
-                agentAvatar = agentAvatar,
-                userAvatar = userAvatar,
-                agentAvatarUri = agentAvatarUri,
-                userAvatarUri = userAvatarUri,
-                moodText = moodText,
-                nowPlaying = nowPlaying,
+                chatTitle = chat?.title ?: "对话", messages = currentMessages,
+                streamingContent = streamingContent, isLoading = isLoading,
+                agentAvatar = agentAvatar, userAvatar = userAvatar,
+                agentAvatarUri = agentAvatarUri, userAvatarUri = userAvatarUri,
+                moodText = moodText, nowPlaying = nowPlaying,
                 onBack = { navController.popBackStack() },
-                onSendMessage = { content -> chatViewModel.sendMessage(content) },
+                onSendMessage = { chatViewModel.sendMessage(it) },
                 onPlayMusic = { chatViewModel.playMusic() },
                 onPauseMusic = { chatViewModel.pauseMusic() },
                 onSkipNext = { chatViewModel.skipNextMusic() },
@@ -96,13 +80,11 @@ fun AppNavigation() {
 
         composable("moments") {
             MomentsScreen(
-                agentAvatar = agentAvatar,
-                agentAvatarUri = agentAvatarUri,
-                posts = momentPosts,
-                isLoading = momentIsLoading,
+                agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
+                posts = momentPosts, isLoading = false,
                 onBack = { navController.popBackStack() },
-                onGenerateNew = { momentsViewModel.generateMomentsPost() },
-                onToggleLike = { momentsViewModel.toggleLike(it) }
+                onGenerateNew = { chatViewModel.generateMomentsPost() },
+                onToggleLike = { chatViewModel.toggleLike(it) }
             )
         }
 
