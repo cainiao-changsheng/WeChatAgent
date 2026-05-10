@@ -107,24 +107,21 @@ class TypingHabitTracker(private val prefs: SharedPreferences) {
         if (text.length < 20) return listOf(text)
 
         val style = getMyTypingStyle()
-        val messages = mutableListOf<String>()
         val rawSegments = text
-            .split(Regex("(?<=[。！？!?\\n])|(?=\n)"))
+            .split("\n\n")
             .filter { it.isNotBlank() }
-            .flatMap { seg ->
-                if (seg.length <= style.maxLen) listOf(seg.trim())
-                else seg.trim().chunked(style.maxLen).map { it.trim() }
-            }
+            .map { it.trim() }
             .filter { it.isNotEmpty() }
 
+        val messages = mutableListOf<String>()
         for (seg in rawSegments) {
             if (seg.length <= style.maxLen) {
                 messages.add(seg)
             } else {
                 var remaining = seg
                 while (remaining.length > style.maxLen) {
-                    val cutPoint = remaining.indexOfAny(charArrayOf('，', ',', ' '), style.maxLen - 10)
-                        .let { if (it >= 1 && it <= style.maxLen) it else style.maxLen }
+                    val cutPoint = remaining.indexOfAny(charArrayOf('，', ',', ' '), style.maxLen - 8)
+                        .let { if (it >= 8 && it <= style.maxLen) it else style.maxLen }
                     messages.add(remaining.substring(0, cutPoint).trim())
                     remaining = remaining.substring(cutPoint).trim()
                 }
