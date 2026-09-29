@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.wechat.agent.data.AgentProfile
 import com.wechat.agent.data.model.Chat
 import com.wechat.agent.ui.theme.WeChatGreen
 
@@ -51,10 +52,8 @@ import com.wechat.agent.ui.theme.WeChatGreen
 @Composable
 fun ContactsScreen(
     chats: List<Chat>,
-    agentName: String = "AI伴侣",
-    agentAvatar: String = "🤖",
-    agentAvatarUri: String = "",
-    onOpenAgentDetail: () -> Unit,
+    profiles: List<AgentProfile>,
+    onOpenAgentDetail: (String) -> Unit,
     onNewFriendClick: () -> Unit,
     bottomBar: @Composable () -> Unit = {}
 ) {
@@ -96,25 +95,24 @@ fun ContactsScreen(
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f))
             }
 
-            // Agent 联系人（点击进入角色详情）
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenAgentDetail)
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AgentAvatar(agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri)
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(agentName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text("24 小时在线的 AI 好友",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
+            // AI 角色联系人列表（每个角色独立，点击进入角色详情）
+            if (profiles.isEmpty()) {
+                Text(
+                    text = "暂无 AI 好友，点击下方「新的朋友」添加",
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                )
+            } else {
+                profiles.forEach { profile ->
+                    AgentContactRow(
+                        name = profile.name,
+                        avatar = profile.avatar,
+                        avatarUri = profile.avatarUri,
+                        onClick = { onOpenAgentDetail(profile.id) }
+                    )
                 }
-                Spacer(modifier = Modifier.weight(1f))
-                Text("详情", style = MaterialTheme.typography.bodySmall, color = WeChatGreen)
             }
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -139,30 +137,53 @@ fun ContactsScreen(
 }
 
 @Composable
-private fun AgentAvatar(agentAvatar: String, agentAvatarUri: String) {
+private fun AgentContactRow(
+    name: String,
+    avatar: String,
+    avatarUri: String,
+    onClick: () -> Unit
+) {
     val context = LocalContext.current
-    Box(
+    Row(
         modifier = Modifier
-            .size(44.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(WeChatGreen),
-        contentAlignment = Alignment.Center
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        if (agentAvatarUri.isNotEmpty()) {
-            AsyncImage(
-                model = ImageRequest.Builder(context).data(Uri.parse(agentAvatarUri)).crossfade(true).build(),
-                contentDescription = "",
-                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
-            )
-        } else {
-            Text(agentAvatar, fontSize = MaterialTheme.typography.titleLarge.fontSize)
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(WeChatGreen),
+            contentAlignment = Alignment.Center
+        ) {
+            if (avatarUri.isNotEmpty()) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context).data(Uri.parse(avatarUri)).crossfade(true).build(),
+                    contentDescription = "",
+                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Text(avatar.ifEmpty { "🤖" }, fontSize = MaterialTheme.typography.titleLarge.fontSize)
+            }
         }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text("24 小时在线的 AI 好友",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        Text("详情", style = MaterialTheme.typography.bodySmall, color = WeChatGreen)
     }
 }
 
 @Composable
-private fun ContactPlaceholderRow(icon: ImageVector, title: String, tint: androidx.compose.ui.graphics.Color, onClick: () -> Unit = {}) {
+private fun ContactPlaceholderRow(icon: ImageVector, title: String, tint: Color, onClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()

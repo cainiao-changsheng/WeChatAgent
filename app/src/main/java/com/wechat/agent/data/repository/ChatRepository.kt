@@ -4,6 +4,9 @@ import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.network.ChatRequest
 import com.wechat.agent.data.network.RetrofitClient
+import com.wechat.agent.data.network.VisionChatRequest
+import com.wechat.agent.data.network.VisionContent
+import com.wechat.agent.data.network.VisionMessage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -70,6 +73,44 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         try {
             val request = ChatRequest(model = model, messages = chatMessages, stream = false)
             val response = RetrofitClient.getApiService().sendMessage(
+                authorization = "Bearer $apiKey",
+                request = request
+            )
+            if (response.isSuccessful) {
+                val body = response.body()
+                val content = body?.choices?.firstOrNull()?.message?.content ?: ""
+                Result.success(content)
+            } else {
+                val errorBody = response.errorBody()?.string() ?: ""
+                Result.failure(Exception("API 错误: $errorBody"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /** 多模态消息发送：携带 text + 图片（data URL），用于朋友圈识图回复。 */
+    suspend fun sendVisionMessage(
+        model: String,
+        apiKey: String,
+        prompt: String,
+        imageDataUrl: String
+    ): Result<String> = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        try {
+            val request = VisionChatRequest(
+                model = model,
+                messages = listOf(
+                    VisionMessage(
+                        role = "user",
+                        content = listOf(
+                            VisionContent(type = "text", text = prompt),
+                            VisionContent(type = "image_url", imageUrl = mapOf("url" to imageDataUrl))
+                        )
+                    )
+                ),
+                stream = false
+            )
+            val response = RetrofitClient.getApiService().sendVisionMessage(
                 authorization = "Bearer $apiKey",
                 request = request
             )

@@ -4,6 +4,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -49,12 +52,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.ui.theme.WeChatGreen
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AgentDetailScreen(
+    agentId: String,
     agentName: String,
     agentGender: String,
     agentAge: String,
@@ -62,6 +67,10 @@ fun AgentDetailScreen(
     agentGlobalSettings: String,
     agentAvatar: String,
     agentAvatarUri: String,
+    backupIntervalMinutes: Int,
+    backupOverwrite: Boolean,
+    backupOnExit: Boolean,
+    onBackupConfigChange: (intervalMinutes: Int, overwrite: Boolean, onExit: Boolean) -> Unit,
     onBack: () -> Unit,
     onEdit: () -> Unit,
     onSendMessage: () -> Unit
@@ -175,11 +184,11 @@ fun AgentDetailScreen(
                 Column(Modifier.padding(16.dp)) {
                     Text("🧠 记忆库", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("支持导出/导入 .json 或 .md 格式的记忆备份", style = MaterialTheme.typography.bodySmall,
+                    Text("每个 AI 好友拥有独立的记忆库文件，支持导出/导入 .json 或 .md 格式", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    val memoryManager = remember { com.wechat.agent.data.MemoryManager(context.applicationContext) }
+                    val memoryManager = remember { MemoryManager(context.applicationContext, agentId) }
 
                     val exportJsonLauncher = rememberLauncherForActivityResult(
                         ActivityResultContracts.CreateDocument("application/json")
@@ -222,9 +231,8 @@ fun AgentDetailScreen(
                                 val content = raw.removePrefix("\uFEFF").trimStart()
                                 val ok = when {
                                     content.isBlank() -> false
-                                    content.startsWith("{") -> {
-                                        memoryManager.importJson(content) || memoryManager.importMarkdown(content)
-                                    }
+                                    content.startsWith("{") -> memoryManager.importJson(content)
+                                    content.startsWith("[") -> memoryManager.importJson(content)
                                     else -> memoryManager.importMarkdown(content)
                                 }
                                 snackbarHostState.showSnackbar(
@@ -257,8 +265,82 @@ fun AgentDetailScreen(
                     ) { Text("导入记忆（自动识别 json / md）", fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface) }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("导入会覆盖当前记忆，请谨慎操作", style = MaterialTheme.typography.labelSmall,
+                    Text("导入会覆盖当前角色记忆，请谨慎操作", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ===== 自动备份 =====
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("🛡 自动备份", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("自动备份当前角色的记忆库文件，备份保存在应用内部", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    BackupToggleRow(
+                        title = "自动备份",
+                        subtitle = "按下方间隔自动备份记忆库",
+                        checked = backupIntervalMinutes > 0,
+                        onCheckedChange = { enabled ->
+                            onBackupConfigChange(if (enabled) 60 else 0, backupOverwrite, backupOnExit)
+                        }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("备份间隔", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                when (backupIntervalMinutes) {
+                                    0 -> "未开启定时备份"
+                                    15 -> "每 15 分钟"
+                                    30 -> "每 30 分钟"
+                                    60 -> "每小时"
+                                    180 -> "每 3 小时"
+                                    720 -> "每 12 小时"
+                                    else -> "每 $backupIntervalMinutes 分钟"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                        BackupIntervalSelector(
+                            interval = backupIntervalMinutes,
+                            onSelect = { minutes -> onBackupConfigChange(minutes, backupOverwrite, backupOnExit) }
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    BackupToggleRow(
+                        title = "覆盖旧备份",
+                        subtitle = "开启后每次备份覆盖上一份，否则按时间生成多份",
+                        checked = backupOverwrite,
+                        onCheckedChange = { overwrite ->
+                            onBackupConfigChange(backupIntervalMinutes, overwrite, backupOnExit)
+                        }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    BackupToggleRow(
+                        title = "退出聊天时备份",
+                        subtitle = "离开聊天窗口时自动备份当前记忆",
+                        checked = backupOnExit,
+                        onCheckedChange = { onExit ->
+                            onBackupConfigChange(backupIntervalMinutes, backupOverwrite, onExit)
+                        }
+                    )
                 }
             }
 
@@ -271,6 +353,68 @@ fun AgentDetailScreen(
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
             )
             Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun BackupToggleRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(subtitle, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun BackupIntervalSelector(
+    interval: Int,
+    onSelect: (Int) -> Unit
+) {
+    val options = listOf(15, 30, 60, 180, 720)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        options.forEach { minutes ->
+            val selected = interval == minutes
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(
+                        if (selected) WeChatGreen.copy(alpha = 0.15f)
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    .then(
+                        if (selected) Modifier.border(1.5.dp, WeChatGreen, RoundedCornerShape(14.dp))
+                        else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
+                    )
+                    .clickable { onSelect(minutes) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    when (minutes) {
+                        15 -> "15分"
+                        30 -> "30分"
+                        60 -> "1时"
+                        180 -> "3时"
+                        else -> "12时"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (selected) WeChatGreen else MaterialTheme.colorScheme.onSurface,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                )
+            }
         }
     }
 }

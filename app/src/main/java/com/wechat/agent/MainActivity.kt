@@ -4,16 +4,21 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.wechat.agent.data.AutoBackupConfig
 import com.wechat.agent.ui.components.WeChatBottomBar
 import com.wechat.agent.ui.screens.AgentDetailScreen
 import com.wechat.agent.ui.screens.AgentSetupScreen
+import com.wechat.agent.ui.screens.ChangelogScreen
 import com.wechat.agent.ui.screens.ChatListScreen
 import com.wechat.agent.ui.screens.ChatScreen
 import com.wechat.agent.ui.screens.ComposeMomentScreen
@@ -64,6 +69,14 @@ fun AppNavigation() {
     val agentGlobalSettings by settingsViewModel.agentGlobalSettings.collectAsState()
     val nowPlaying by chatViewModel.nowPlaying.collectAsState()
     val momentPosts by chatViewModel.momentsPosts.collectAsState()
+    val agentProfiles by settingsViewModel.agentProfiles.collectAsState()
+    val currentAgentId by settingsViewModel.currentAgentId.collectAsState()
+    val backupConfig by settingsViewModel.backupConfig.collectAsState()
+
+    // 当前 AI 角色变化时，聊天数据、记忆库、朋友圈等一并切换
+    LaunchedEffect(currentAgentId) {
+        chatViewModel.switchAgent(currentAgentId)
+    }
 
     fun openChatWithAgent() {
         if (chats.isNotEmpty()) {
@@ -92,9 +105,9 @@ fun AppNavigation() {
 
         composable("contacts") {
             ContactsScreen(
-                chats = chats, agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
-                agentName = agentName,
-                onOpenAgentDetail = { navController.navigate("agentDetail") },
+                chats = chats,
+                profiles = agentProfiles,
+                onOpenAgentDetail = { agentId -> navController.navigate("agentDetail/$agentId") },
                 onNewFriendClick = { navController.navigate("agentSetup") },
                 bottomBar = {
                     WeChatBottomBar(
@@ -117,9 +130,8 @@ fun AppNavigation() {
                 initialAvatarUri = agentAvatarUri,
                 onBack = { navController.popBackStack() },
                 onSave = { name, gender, age, persona, global, avatar, avatarUri ->
-                    settingsViewModel.saveAgentProfile(name, gender, age, persona, global)
-                    if (avatar.isNotEmpty()) settingsViewModel.saveAvatar(avatar, userAvatar)
-                    if (avatarUri.isNotEmpty()) settingsViewModel.saveAvatarUri(avatarUri, userAvatarUri)
+                    // 新增角色：追加到角色列表，不覆盖默认角色，并自动切换为新角色
+                    settingsViewModel.addAgentProfile(name, gender, age, persona, global, avatar, avatarUri)
                     navController.popBackStack()
                 }
             )
@@ -137,23 +149,48 @@ fun AppNavigation() {
                 initialAvatarUri = agentAvatarUri,
                 onBack = { navController.popBackStack() },
                 onSave = { name, gender, age, persona, global, avatar, avatarUri ->
-                    settingsViewModel.saveAgentProfile(name, gender, age, persona, global)
-                    if (avatar.isNotEmpty()) settingsViewModel.saveAvatar(avatar, userAvatar)
-                    if (avatarUri.isNotEmpty()) settingsViewModel.saveAvatarUri(avatarUri, userAvatarUri)
+                    settingsViewModel.updateCurrentAgentProfile(name, gender, age, persona, global, avatar, avatarUri)
                     navController.popBackStack()
                 }
             )
         }
 
-        composable("agentDetail") {
+        composable(
+            route = "agentDetail/{agentId}",
+            arguments = listOf(navArgument("agentId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val agentId = backStackEntry.arguments?.getString("agentId") ?: return@composable
+            val profile = agentProfiles.find { it.id == agentId }
+            if (profile == null) {
+                LaunchedEffect(Unit) { navController.popBackStack() }
+                return@composable
+            }
+            // 进入角色详情即切换为该角色：记忆库、聊天、朋友圈全部使用该角色独立数据
+            LaunchedEffect(agentId) {
+                settingsViewModel.switchAgent(agentId)
+            }
             AgentDetailScreen(
-                agentName = agentName,
-                agentGender = agentGender,
-                agentAge = agentAge,
-                agentPersona = agentPersona,
-                agentGlobalSettings = agentGlobalSettings,
-                agentAvatar = agentAvatar,
-                agentAvatarUri = agentAvatarUri,
+                agentId = profile.id,
+                agentName = profile.name,
+                agentGender = profile.gender,
+                agentAge = profile.age,
+                agentPersona = profile.persona,
+                agentGlobalSettings = profile.globalSettings,
+                agentAvatar = profile.avatar,
+                agentAvatarUri = profile.avatarUri,
+                backupIntervalMinutes = backupConfig.intervalMinutes,
+                backupOverwrite = backupConfig.overwriteOld,
+                backupOnExit = backupConfig.backupOnExit,
+                onBackupConfigChange = { interval, overwrite, onExit ->
+                    settingsViewModel.saveBackupConfig(
+                        AutoBackupConfig(
+                            enabled = interval > 0,
+                            intervalMinutes = interval,
+                            overwriteOld = overwrite,
+                            backupOnExit = onExit
+                        )
+                    )
+                },
                 onBack = { navController.popBackStack() },
                 onEdit = { navController.navigate("agentSetupEdit") },
                 onSendMessage = { openChatWithAgent() }
@@ -169,7 +206,10 @@ fun AppNavigation() {
                 agentAvatar = agentAvatar, userAvatar = userAvatar,
                 agentAvatarUri = agentAvatarUri, userAvatarUri = userAvatarUri,
                 moodText = moodText, nowPlaying = nowPlaying,
-                onBack = { navController.popBackStack() },
+                onBack = {
+                    chatViewModel.backupOnExit()
+                    navController.popBackStack()
+                },
                 onSendMessage = { chatViewModel.sendMessage(it) },
                 onSendImage = { chatViewModel.sendImageMessage(it) },
                 onPlayMusic = { chatViewModel.playMusic() },
@@ -234,7 +274,8 @@ fun AppNavigation() {
                 showBack = true,
                 onBack = { navController.popBackStack() },
                 onOpenModelConfig = { navController.navigate("modelConfig") },
-                onOpenUpdateCheck = { navController.navigate("updateCheck") }
+                onOpenUpdateCheck = { navController.navigate("updateCheck") },
+                onOpenChangelog = { navController.navigate("changelog") }
             )
         }
 
@@ -247,6 +288,12 @@ fun AppNavigation() {
 
         composable("updateCheck") {
             UpdateCheckScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("changelog") {
+            ChangelogScreen(
                 onBack = { navController.popBackStack() }
             )
         }

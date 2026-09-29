@@ -21,4 +21,12 @@ interface ApiService {
         @Header("Authorization") authorization: String,
         @Body request: ChatRequest
     ): Response<okhttp3.ResponseBody>
+
+    /** 多模态请求：content 支持 text + image_url 混合，用于朋友圈识图回复。 */
+    @Headers("Content-Type: application/json")
+    @POST("v1/chat/completions")
+    suspend fun sendVisionMessage(
+        @Header("Authorization") authorization: String,
+        @Body request: VisionChatRequest
+    ): Response<ChatResponse>
 }

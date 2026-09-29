@@ -53,9 +53,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val momentsGenerator = MomentsGenerator(memoryManager)
     private val decisionEngine = LifeDecisionEngine(memoryManager)
     private val gson = Gson()
-    private val chatPrefs: SharedPreferences = application.getSharedPreferences("chat_sessions", 0)
-    private val momentsPrefs: SharedPreferences = application.getSharedPreferences("moments", 0)
-    private val statusPrefs: SharedPreferences = application.getSharedPreferences("agent_status", 0)
+
+    // 各角色独立的数据文件（默认角色使用旧文件兼容历史数据）
+    private var currentAgentId: String = SettingsManager.DEFAULT_AGENT_ID
+    private var chatPrefs: SharedPreferences = application.getSharedPreferences("chat_sessions", 0)
+    private var momentsPrefs: SharedPreferences = application.getSharedPreferences("moments", 0)
+    private var statusPrefs: SharedPreferences = application.getSharedPreferences("agent_status", 0)
+
+    private fun prefsName(base: String): String =
+        if (currentAgentId.isBlank() || currentAgentId == SettingsManager.DEFAULT_AGENT_ID) base else "${base}_$currentAgentId"
 
     private val _chats = MutableStateFlow<List<Chat>>(emptyList())
     val chats = _chats.asStateFlow()
@@ -98,24 +104,55 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var streamingJob: Job? = null
     private var deliveryJob: Job? = null
     private var statusJob: Job? = null
+    private var backupJob: Job? = null
     private var lastUserMessageTime: Long = 0
     private var messageDeliverySequence = 0
+    private var lastBackupAt: Long = 0
 
     init {
-        loadChatsFromStorage()
-        loadMomentsFromStorage()
-        _agentStatus.value = decisionEngine.loadStatus(statusPrefs)
+        // 先以默认角色初始化，随后按当前选中角色切换加载
+        bindAgent(SettingsManager.DEFAULT_AGENT_ID, apply = true)
         viewModelScope.launch {
-            _emotionState.value = memoryManager.loadEmotion()
-            _moodText.value = emotionEngine.getMoodDescription(
-                _emotionState.value.mood, _emotionState.value.affinity
-            )
+            val id = settingsManager.currentAgentId.first()
+            if (id != currentAgentId) bindAgent(id, apply = true)
             repository.formatRule = typingTracker.getFormatRule()
-            runLifeSimulation()
-            refreshAgentStatus()
-            startStatusLoop()
         }
         try { musicController.connect() } catch (_: Exception) {}
+    }
+
+    /**
+     * 切换当前 AI 角色：记忆库、聊天记录、朋友圈、状态、情绪全部切换为该角色独立数据。
+     */
+    fun switchAgent(agentId: String) {
+        if (agentId.isBlank()) return
+        viewModelScope.launch {
+            settingsManager.setCurrentAgentId(agentId)
+            bindAgent(agentId, apply = true)
+        }
+    }
+
+    private fun bindAgent(agentId: String, apply: Boolean) {
+        currentAgentId = agentId
+        memoryManager.setActiveAgent(agentId)
+        chatPrefs = getApplication<Application>().getSharedPreferences(prefsName("chat_sessions"), 0)
+        momentsPrefs = getApplication<Application>().getSharedPreferences(prefsName("moments"), 0)
+        statusPrefs = getApplication<Application>().getSharedPreferences(prefsName("agent_status"), 0)
+        if (apply) {
+            loadChatsFromStorage()
+            loadMomentsFromStorage()
+            _agentStatus.value = decisionEngine.loadStatus(statusPrefs)
+            _currentChatId.value = null
+            _currentMessages.value = emptyList()
+            viewModelScope.launch {
+                _emotionState.value = memoryManager.loadEmotion()
+                _moodText.value = emotionEngine.getMoodDescription(
+                    _emotionState.value.mood, _emotionState.value.affinity
+                )
+                refreshAgentStatus()
+            }
+            startStatusLoop()
+            startBackupLoop()
+        }
     }
 
     /**
@@ -130,6 +167,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 runLifeSimulation()
                 refreshAgentStatus()
             }
+        }
+    }
+
+    /** 记忆库自动备份循环：按用户设置间隔执行备份。 */
+    private fun startBackupLoop() {
+        backupJob?.cancel()
+        backupJob = viewModelScope.launch {
+            while (isActive) {
+                delay(60 * 1000L)
+                try {
+                    val config = settingsManager.getBackupConfigOnce()
+                    if (!config.enabled) continue
+                    val intervalMs = config.intervalMinutes.coerceAtLeast(1) * 60 * 1000L
+                    val now = System.currentTimeMillis()
+                    if (lastBackupAt == 0L || now - lastBackupAt >= intervalMs) {
+                        memoryManager.backupNow(config.overwriteOld)
+                        lastBackupAt = now
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    /** 退出聊天窗口时备份（由界面返回事件触发）。 */
+    fun backupOnExit() {
+        viewModelScope.launch {
+            try {
+                val config = settingsManager.getBackupConfigOnce()
+                if (config.enabled && config.backupOnExit) {
+                    memoryManager.backupNow(config.overwriteOld)
+                }
+            } catch (_: Exception) {}
         }
     }
 
@@ -540,7 +609,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         reactToPost(post.id)
     }
 
-    /** 用户评论动态，AI 角色会视心情/好感度选择是否回复。 */
+    /** 用户评论动态，AI 角色会视心情/好感度选择是否回复，并支持连续嵌套回复直到一方停止。 */
     fun addComment(postId: String, comment: String) {
         val trimmed = comment.trim()
         if (trimmed.isEmpty()) return
@@ -554,24 +623,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         aiReplyToComment(postId)
     }
 
-    /** AI 对评论选择性回复：好感度越高、心情越好越容易回复。 */
+    /** AI 对评论选择性回复：好感度越高、心情越好越容易回复；最多连续回复 4 轮，之后由概率决定停止。 */
     private fun aiReplyToComment(postId: String) {
         viewModelScope.launch {
             try {
                 val post = _momentsPosts.value.find { it.id == postId } ?: return@launch
+                val agentName = settingsManager.agentName.first()
+                // 连续回复轮数上限：防止无限循环
+                val aiReplyCount = post.comments.count { it.startsWith("$agentName::") }
+                if (aiReplyCount >= 4) return@launch
+
                 val state = _emotionState.value
                 val rand = Random.nextInt(100)
+                // 轮数越深，AI 越可能停止回复，模拟"直到一方停止"
+                val depthFactor = 100 - (aiReplyCount * 18)
                 val willReply = when {
-                    state.affinity >= 70 -> rand < 85
-                    state.affinity >= 45 -> rand < 60
-                    state.affinity >= 25 -> rand < 35
-                    else -> rand < 15
+                    state.affinity >= 70 -> rand < (85 * depthFactor / 100)
+                    state.affinity >= 45 -> rand < (60 * depthFactor / 100)
+                    state.affinity >= 25 -> rand < (35 * depthFactor / 100)
+                    else -> rand < (15 * depthFactor / 100)
                 }
                 if (!willReply) return@launch
 
                 val userComment = post.comments.lastOrNull() ?: return@launch
-                val reply = generateReplyToComment(state, userComment.removePrefix("我::"))
-                val agentName = settingsManager.agentName.first()
+                val prevAiComment = post.comments.filter { it.startsWith("$agentName::") }.lastOrNull()
+                val reply = generateReplyToComment(state, userComment.removePrefix("我::"), prevAiComment?.substringAfter("::"), post)
 
                 val updated = post.copy(
                     commentCount = post.commentCount + 1,
@@ -583,16 +659,36 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun generateReplyToComment(state: EmotionState, userComment: String): String {
+    private suspend fun generateReplyToComment(
+        state: EmotionState, userComment: String, prevAiComment: String?, post: MomentPost
+    ): String {
         return try {
             val apiKey = settingsManager.apiKey.first()
             val model = settingsManager.modelName.first()
             if (apiKey.isNotEmpty()) {
-                val prompt = "你正在看朋友圈，对方在你动态下评论: \"${userComment.take(60)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
-                    "请以AI伴侣的身份，回一条简短自然的回复（15字以内），像真人回复评论一样，不要引号和任何符号前缀。直接输出。"
-                repository.sendMessage(model, apiKey,
-                    listOf(ChatMessage(role = "user", content = prompt)))
-                    .getOrElse { localReplyToComment() }
+                val contextHint = if (prevAiComment != null) {
+                    "你之前在评论里说过: \"${prevAiComment.take(40)}\"，对方是针对你的评论继续回复。"
+                } else {
+                    "对方在你动态下评论。"
+                }
+                val prompt = "$contextHint 对方回复: \"${userComment.take(60)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
+                    "请以AI伴侣的身份，回一条简短自然的回复（15字以内），像真人回复评论一样自然，可以就此打住，不要引号和任何符号前缀。直接输出。"
+                val result = if (post.imageUri.isNotBlank()) {
+                    // 动态带图：若模型支持识图则结合图片内容回复
+                    val imageDataUrl = readImageAsBase64(post.imageUri)
+                    if (imageDataUrl != null) {
+                        repository.sendVisionMessage(
+                            model, apiKey,
+                            prompt + " 这条动态附带了一张图片，请结合图片内容一起回复。",
+                            imageDataUrl
+                        ).getOrElse { repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt))) }
+                    } else {
+                        repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                    }
+                } else {
+                    repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                }
+                result.getOrElse { localReplyToComment() }
                     .removePrefix("\"").removeSuffix("\"").trim().take(30)
             } else {
                 localReplyToComment()
@@ -606,7 +702,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val pool = listOf(
             "哈哈被你发现了", "好呀好呀，听你的", "你这么一说我也觉得",
             "嘿嘿，就知道你会来", "收到啦，谢谢关心", "嗯嗯，我也这么想的",
-            "那当然啦", "走，一起呀", "你眼光真好", "下次带你一起"
+            "那当然啦", "走，一起呀", "你眼光真好", "下次带你一起",
+            "好啦好啦，不逗你了", "就聊到这吧，改天继续", "嘿嘿，记住啦"
         )
         return pool.random()
     }
@@ -640,10 +737,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 val finalComment = comment ?: ""
+                val agentName = settingsManager.agentName.first()
+                val prefixedComment = if (finalComment.isNotEmpty()) "$agentName::$finalComment" else ""
                 val updated = post.copy(
                     likeCount = post.likeCount + (if (aiLiked) 1 else 0),
-                    commentCount = post.commentCount + (if (finalComment.isNotEmpty()) 1 else 0),
-                    comments = if (finalComment.isNotEmpty()) post.comments + finalComment else post.comments,
+                    commentCount = post.commentCount + (if (prefixedComment.isNotEmpty()) 1 else 0),
+                    comments = if (prefixedComment.isNotEmpty()) post.comments + prefixedComment else post.comments,
                     aiLiked = aiLiked,
                     aiReacted = true
                 )
@@ -660,15 +759,57 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (apiKey.isNotEmpty()) {
                 val prompt = "你正在看对方发的朋友圈。对方动态内容: \"${post.content.take(80)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
                     "请以AI伴侣的身份，回一条简短自然的评论（15字以内），像真人发朋友圈评论一样，不要引号和任何符号前缀。直接输出。"
-                repository.sendMessage(model, apiKey,
-                    listOf(ChatMessage(role = "user", content = prompt)))
-                    .getOrElse { localReactionComment(state) }
+                val result = if (post.imageUri.isNotBlank()) {
+                    // 动态带图：优先用多模态识图，结合图片内容回复；模型不支持时降级为纯文本
+                    val imageDataUrl = readImageAsBase64(post.imageUri)
+                    if (imageDataUrl != null) {
+                        repository.sendVisionMessage(
+                            model, apiKey,
+                            prompt + " 这条动态附带了一张图片，请结合图片内容一起评论。",
+                            imageDataUrl
+                        ).getOrElse { repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt))) }
+                    } else {
+                        repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                    }
+                } else {
+                    repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                }
+                result.getOrElse { localReactionComment(state) }
                     .removePrefix("\"").removeSuffix("\"").trim().take(30)
             } else {
                 localReactionComment(state)
             }
         } catch (_: Exception) {
             localReactionComment(state)
+        }
+    }
+
+    /** 读取本地图片 Uri 并压缩为 Base64 Data URL（宽高上限 1024、JPEG 80%），供识图请求使用。 */
+    private fun readImageAsBase64(uriString: String): String? {
+        return try {
+            val resolver = getApplication<Application>().contentResolver
+            val uri = android.net.Uri.parse(uriString)
+            val stream = resolver.openInputStream(uri) ?: return null
+            val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
+            stream.close()
+            val maxDim = 1024
+            val scale = minOf(1f, maxDim.toFloat() / maxOf(bitmap.width, bitmap.height))
+            val scaled = if (scale < 1f) {
+                android.graphics.Bitmap.createScaledBitmap(
+                    bitmap,
+                    (bitmap.width * scale).toInt().coerceAtLeast(1),
+                    (bitmap.height * scale).toInt().coerceAtLeast(1),
+                    true
+                )
+            } else {
+                bitmap
+            }
+            val bos = java.io.ByteArrayOutputStream()
+            scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, bos)
+            if (scaled !== bitmap) scaled.recycle()
+            "data:image/jpeg;base64," + android.util.Base64.encodeToString(bos.toByteArray(), android.util.Base64.NO_WRAP)
+        } catch (_: Exception) {
+            null
         }
     }
 
@@ -823,6 +964,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         statusJob?.cancel()
+        backupJob?.cancel()
         saveChatsToStorage()
         saveMomentsToStorage()
         musicController.release()

@@ -8,18 +8,41 @@ import com.wechat.agent.data.model.MemoryType
 import com.wechat.agent.data.model.Mood
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
+/**
+ * 记忆库管理器：支持多 AI 角色各自独立的记忆库文件。
+ * 默认角色使用旧版 `agent_memory`，其他角色使用 `agent_memory_<agentId>`。
+ */
 class MemoryManager(context: Context) {
 
-    private val prefs: SharedPreferences = context.getSharedPreferences("agent_memory", Context.MODE_PRIVATE)
+    private val appContext = context.applicationContext
     private val gson = Gson()
     private val mutex = Mutex()
+
+    var activeAgentId: String = SettingsManager.DEFAULT_AGENT_ID
+        private set
+
+    private var prefs: SharedPreferences =
+        appContext.getSharedPreferences("agent_memory", Context.MODE_PRIVATE)
+
+    /** 切换到指定角色的记忆库（默认角色兼容旧数据文件）。 */
+    fun setActiveAgent(agentId: String) {
+        if (agentId.isBlank()) return
+        activeAgentId = agentId
+        val name = if (agentId == SettingsManager.DEFAULT_AGENT_ID) "agent_memory" else "agent_memory_$agentId"
+        prefs = appContext.getSharedPreferences(name, Context.MODE_PRIVATE)
+    }
 
     private val identityPromptPermanent = """
 【身份与人格核心设定 - 永久固化】
@@ -207,20 +230,60 @@ class MemoryManager(context: Context) {
         sb.appendLine()
     }
 
+    /**
+     * 导入 JSON 记忆，兼容三种格式：
+     * 1. MemoryBackup 结构对象（本应用导出）
+     * 2. 纯字符串数组（如"记忆库_xxx.json"：每条字符串为一条记忆内容）
+     * 3. 其他 JSON 对象（尽力解析为通用记忆内容）
+     */
     suspend fun importJson(json: String): Boolean = mutex.withLock {
         try {
-            // 兼容带 UTF-8 BOM 的文件头，避免 gson 解析失败
             val cleaned = json.removePrefix("\uFEFF").trim()
-            val backup = gson.fromJson(cleaned, MemoryBackup::class.java)
-            if (backup.memories.isEmpty()) return false
-            backup.memories.forEach { (typeName, entries) ->
-                val type = MemoryType.values().firstOrNull { it.name == typeName } ?: return@forEach
-                saveMemory(type, entries)
+            if (cleaned.isEmpty()) return false
+
+            // 格式 1：本应用导出的 MemoryBackup
+            val backup = try {
+                gson.fromJson(cleaned, MemoryBackup::class.java)
+            } catch (_: Exception) { null }
+            if (backup != null && backup.memories.isNotEmpty()) {
+                backup.memories.forEach { (typeName, entries) ->
+                    val type = MemoryType.values().firstOrNull { it.name == typeName } ?: return@forEach
+                    saveMemory(type, entries)
+                }
+                if (backup.emotion.affinity != 0 || backup.emotion.mood != Mood.HAPPY) {
+                    prefs.edit().putString("emotion_state", gson.toJson(backup.emotion)).apply()
+                }
+                return true
             }
-            if (backup.emotion.affinity != 0 || backup.emotion.mood != Mood.HAPPY) {
-                prefs.edit().putString("emotion_state", gson.toJson(backup.emotion)).apply()
+
+            // 格式 2：纯字符串数组（每条字符串是一条记忆）
+            val stringList = try {
+                gson.fromJson(cleaned, object : TypeToken<List<String>>() {}.type)
+            } catch (_: Exception) { null }
+            if (!stringList.isNullOrEmpty()) {
+                val entries = stringList.map { text ->
+                    MemoryEntry(
+                        id = UUID.randomUUID().toString(),
+                        type = MemoryType.L1_DAILY,
+                        content = text.trim(),
+                        emotion = "neutral",
+                        importance = 5
+                    )
+                }
+                saveMemory(MemoryType.L1_DAILY, entries)
+                return true
             }
-            true
+
+            // 格式 3：其他 JSON 对象，尝试按 MemoryEntry 列表解析
+            val entryList = try {
+                gson.fromJson(cleaned, object : TypeToken<List<MemoryEntry>>() {}.type)
+            } catch (_: Exception) { null }
+            if (!entryList.isNullOrEmpty()) {
+                saveMemory(MemoryType.L1_DAILY, entryList)
+                return true
+            }
+
+            false
         } catch (_: Exception) { false }
     }
 
@@ -281,6 +344,76 @@ class MemoryManager(context: Context) {
             emotion?.let { prefs.edit().putString("emotion_state", gson.toJson(it)).apply() }
             true
         } catch (_: Exception) { false }
+    }
+
+    // ========== 自动备份 ==========
+
+    /** 备份目录：应用外部专用目录（无需存储权限），SD 卡不可用时回退到内部 files。 */
+    private fun backupDir(): File {
+        val external = appContext.getExternalFilesDir("backups")
+        return external ?: File(appContext.filesDir, "backups").also { it.mkdirs() }
+    }
+
+    /** 生成一份 JSON 备份文件；overwriteOld=true 时固定文件名覆盖旧备份。返回文件或 null。 */
+    suspend fun backupNow(overwriteOld: Boolean): File? = mutex.withLock {
+        try {
+            val dir = backupDir().also { it.mkdirs() }
+            val name = if (overwriteOld) {
+                "memory_backup_${activeAgentId}.json"
+            } else {
+                val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                "memory_backup_${activeAgentId}_$ts.json"
+            }
+            val target = File(dir, name)
+            val backup = MemoryBackup(
+                version = 1,
+                exportedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
+                emotion = loadEmotion(),
+                memories = mapOf(
+                    MemoryType.L0_INSTANT.name to loadMemory(MemoryType.L0_INSTANT),
+                    MemoryType.L1_DAILY.name to loadMemory(MemoryType.L1_DAILY),
+                    MemoryType.L2_GROWTH.name to loadMemory(MemoryType.L2_GROWTH)
+                )
+            )
+            target.writeText(gson.toJson(backup))
+            target
+        } catch (_: Exception) { null }
+    }
+
+    /** 同步版本的立即备份（供退出聊天等无需协程的场景使用）。 */
+    fun backupNowSync(overwriteOld: Boolean): File? {
+        return try {
+            val dir = backupDir().also { it.mkdirs() }
+            val name = if (overwriteOld) {
+                "memory_backup_${activeAgentId}.json"
+            } else {
+                val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                "memory_backup_${activeAgentId}_$ts.json"
+            }
+            val target = File(dir, name)
+            val backup = MemoryBackup(
+                version = 1,
+                exportedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
+                emotion = loadEmotionSync(),
+                memories = mapOf(
+                    MemoryType.L0_INSTANT.name to loadMemory(MemoryType.L0_INSTANT),
+                    MemoryType.L1_DAILY.name to loadMemory(MemoryType.L1_DAILY),
+                    MemoryType.L2_GROWTH.name to loadMemory(MemoryType.L2_GROWTH)
+                )
+            )
+            target.writeText(gson.toJson(backup))
+            target
+        } catch (_: Exception) { null }
+    }
+
+    /** 列出当前角色的备份文件。 */
+    fun listBackups(): List<File> {
+        val dir = backupDir()
+        if (!dir.exists()) return emptyList()
+        return dir.listFiles()
+            ?.filter { it.isFile && it.name.contains(activeAgentId) }
+            ?.sortedByDescending { it.lastModified() }
+            ?: emptyList()
     }
 
     private fun loadMemory(type: MemoryType): List<MemoryEntry> {

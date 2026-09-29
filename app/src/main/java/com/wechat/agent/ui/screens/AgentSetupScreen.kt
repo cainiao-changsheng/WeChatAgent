@@ -1,8 +1,5 @@
 package com.wechat.agent.ui.screens
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,7 +22,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,13 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.wechat.agent.ui.theme.WeChatGreen
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -78,18 +70,6 @@ fun AgentSetupScreen(
     var globalSettings by remember { mutableStateOf(initialGlobalSettings) }
     var avatar by remember { mutableStateOf(initialAvatar) }
     var avatarUri by remember { mutableStateOf(initialAvatarUri) }
-
-    val context = LocalContext.current
-    val galleryLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        uri?.let {
-            val takeFlags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
-            context.contentResolver.takePersistableUriPermission(it, takeFlags)
-            avatarUri = it.toString()
-            avatar = ""
-        }
-    }
 
     fun doSave() {
         val finalName = name.trim().ifEmpty { "AI伴侣" }
@@ -121,37 +101,19 @@ fun AgentSetupScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // 头像
+            // 头像（仅展示默认头像，不再提供“从相册上传”按钮）
             Text("头像", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
-            Text("默认显示默认头像，可点击头像从相册上传", style = MaterialTheme.typography.bodySmall,
+            Text("每个 AI 好友拥有独立的默认头像", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(72.dp).clip(CircleShape)
-                        .background(WeChatGreen.copy(alpha = 0.15f))
-                        .clickable { galleryLauncher.launch("image/*") },
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (avatarUri.isNotEmpty()) {
-                        AsyncImage(
-                            model = ImageRequest.Builder(context).data(Uri.parse(avatarUri)).crossfade(true).build(),
-                            contentDescription = "",
-                            modifier = Modifier.fillMaxSize().clip(CircleShape),
-                            contentScale = ContentScale.Crop
-                        )
-                    } else {
-                        Text(avatar.ifEmpty { "🤖" }, fontSize = MaterialTheme.typography.displaySmall.fontSize)
-                    }
-                }
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Icon(Icons.Default.PhotoLibrary, contentDescription = "", tint = WeChatGreen)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("从相册上传", style = MaterialTheme.typography.bodySmall, color = WeChatGreen)
-                }
+            Box(
+                modifier = Modifier.size(72.dp).clip(CircleShape)
+                    .background(WeChatGreen.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(avatar.ifEmpty { "🤖" }, fontSize = MaterialTheme.typography.displaySmall.fontSize)
             }
 
             Spacer(modifier = Modifier.height(20.dp))

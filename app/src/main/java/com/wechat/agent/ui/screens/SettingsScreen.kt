@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Card
@@ -38,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.wechat.agent.ui.theme.WeChatGreen
 
 /**
- * 设置菜单页：提供「模型配置」「检查更新」跳转入口。
+ * 设置菜单页：提供「模型配置」「检查更新」「更新日志」跳转入口。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,6 +48,7 @@ fun SettingsScreen(
     showBack: Boolean = true,
     onOpenModelConfig: () -> Unit = {},
     onOpenUpdateCheck: () -> Unit = {},
+    onOpenChangelog: () -> Unit = {},
     bottomBar: @Composable () -> Unit = {}
 ) {
     Scaffold(
@@ -97,12 +99,22 @@ fun SettingsScreen(
                         subtitle = "在线检查并安装新版本",
                         onClick = onOpenUpdateCheck
                     )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
+                    SettingsMenuItem(
+                        icon = { Icon(Icons.Default.History, contentDescription = null, tint = WeChatGreen) },
+                        title = "更新日志",
+                        subtitle = "查看历史版本更新内容",
+                        onClick = onOpenChangelog
+                    )
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                "设置项已拆分：模型配置用于接入 AI 接口，检查更新用于在线升级 App",
+                "设置项已拆分：模型配置用于接入 AI 接口，检查更新用于在线升级 App，更新日志展示历史版本记录",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )

@@ -1,15 +1,44 @@
 package com.wechat.agent.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+/** AI 角色档案：每个角色拥有独立的 id、形象与记忆库。 */
+data class AgentProfile(
+    val id: String,
+    val name: String,
+    val gender: String = "女",
+    val age: String = "18",
+    val persona: String = "",
+    val globalSettings: String = "",
+    val avatar: String = "🤖",
+    val avatarUri: String = ""
+)
+
+/** 记忆库自动备份配置。 */
+data class AutoBackupConfig(
+    val enabled: Boolean = false,
+    val intervalMinutes: Int = 60,
+    val overwriteOld: Boolean = false,
+    val backupOnExit: Boolean = false
+)
 
 class SettingsManager(private val context: Context) {
 
@@ -38,7 +67,138 @@ class SettingsManager(private val context: Context) {
         const val DEFAULT_AGENT_AGE = "18"
         const val DEFAULT_AGENT_PERSONA = "温柔、善解人意，像好朋友一样陪伴你"
         const val DEFAULT_USER_NICKNAME = "我"
+
+        const val DEFAULT_AGENT_ID = "default"
     }
+
+    private val gson = Gson()
+    private val profilePrefs: SharedPreferences =
+        context.getSharedPreferences("agent_profiles", Context.MODE_PRIVATE)
+
+    // ========== 多角色档案（SharedPreferences 同步存储） ==========
+
+    private val _agentProfiles = MutableStateFlow(loadProfiles())
+    val agentProfiles: StateFlow<List<AgentProfile>> = _agentProfiles.asStateFlow()
+
+    private val _currentAgentId = MutableStateFlow(
+        profilePrefs.getString("current_agent_id", DEFAULT_AGENT_ID) ?: DEFAULT_AGENT_ID
+    )
+    val currentAgentId: StateFlow<String> = _currentAgentId.asStateFlow()
+
+    val currentAgentProfile: StateFlow<AgentProfile?> =
+        combine(agentProfiles, currentAgentId) { list, id ->
+            list.find { it.id == id } ?: list.firstOrNull()
+        }.asStateFlow()
+
+    init {
+        // 首次启动迁移：旧单角色配置构建默认角色档案
+        if (_agentProfiles.value.isEmpty()) {
+            val defaultProfile = AgentProfile(
+                id = DEFAULT_AGENT_ID,
+                name = DEFAULT_AGENT_NAME,
+                gender = DEFAULT_AGENT_GENDER,
+                age = DEFAULT_AGENT_AGE,
+                persona = DEFAULT_AGENT_PERSONA,
+                globalSettings = "",
+                avatar = DEFAULT_AGENT_AVATAR,
+                avatarUri = ""
+            )
+            saveProfileInternal(defaultProfile)
+            profilePrefs.edit().putString("current_agent_id", DEFAULT_AGENT_ID).apply()
+            _currentAgentId.value = DEFAULT_AGENT_ID
+        }
+    }
+
+    fun addAgentProfile(
+        name: String, gender: String, age: String, persona: String,
+        globalSettings: String, avatar: String = DEFAULT_AGENT_AVATAR, avatarUri: String = ""
+    ): String {
+        val id = UUID.randomUUID().toString()
+        val profile = AgentProfile(
+            id = id, name = name.ifBlank { DEFAULT_AGENT_NAME },
+            gender = gender.ifBlank { DEFAULT_AGENT_GENDER },
+            age = age.ifBlank { DEFAULT_AGENT_AGE },
+            persona = persona, globalSettings = globalSettings,
+            avatar = avatar.ifBlank { DEFAULT_AGENT_AVATAR }, avatarUri = avatarUri
+        )
+        val updated = (_agentProfiles.value + profile).distinctBy { it.id }
+        saveProfileInternalList(updated)
+        _agentProfiles.value = updated
+        return id
+    }
+
+    fun updateAgentProfile(profile: AgentProfile) {
+        val updated = _agentProfiles.value.map {
+            if (it.id == profile.id) profile else it
+        }
+        saveProfileInternalList(updated)
+        _agentProfiles.value = updated
+    }
+
+    fun deleteAgentProfile(id: String) {
+        val updated = _agentProfiles.value.filter { it.id != id }
+        saveProfileInternalList(updated)
+        _agentProfiles.value = updated
+        if (_currentAgentId.value == id) {
+            val fallback = updated.firstOrNull()?.id ?: DEFAULT_AGENT_ID
+            setCurrentAgentId(fallback)
+        }
+    }
+
+    fun setCurrentAgentId(id: String) {
+        profilePrefs.edit().putString("current_agent_id", id).apply()
+        _currentAgentId.value = id
+    }
+
+    fun getAgentProfile(id: String): AgentProfile? =
+        _agentProfiles.value.find { it.id == id }
+
+    // ========== 记忆库自动备份配置（SharedPreferences 同步存储） ==========
+
+    private val _backupConfig = MutableStateFlow(loadBackupConfig())
+    val backupConfig: StateFlow<AutoBackupConfig> = _backupConfig.asStateFlow()
+
+    fun saveBackupConfig(config: AutoBackupConfig) {
+        profilePrefs.edit()
+            .putBoolean("backup_enabled", config.enabled)
+            .putInt("backup_interval_minutes", config.intervalMinutes.coerceIn(5, 1440))
+            .putBoolean("backup_overwrite_old", config.overwriteOld)
+            .putBoolean("backup_on_exit", config.backupOnExit)
+            .apply()
+        _backupConfig.value = config.copy(
+            intervalMinutes = config.intervalMinutes.coerceIn(5, 1440)
+        )
+    }
+
+    fun getBackupConfigSync(): AutoBackupConfig = _backupConfig.value
+
+    suspend fun getBackupConfigOnce(): AutoBackupConfig = backupConfig.first()
+
+    private fun loadBackupConfig(): AutoBackupConfig {
+        return AutoBackupConfig(
+            enabled = profilePrefs.getBoolean("backup_enabled", false),
+            intervalMinutes = profilePrefs.getInt("backup_interval_minutes", 60).coerceIn(5, 1440),
+            overwriteOld = profilePrefs.getBoolean("backup_overwrite_old", false),
+            backupOnExit = profilePrefs.getBoolean("backup_on_exit", false)
+        )
+    }
+
+    private fun loadProfiles(): List<AgentProfile> {
+        val json = profilePrefs.getString("profiles", null) ?: return emptyList()
+        return try {
+            gson.fromJson(json, object : TypeToken<List<AgentProfile>>() {}.type)
+        } catch (_: Exception) { emptyList() }
+    }
+
+    private fun saveProfileInternal(profile: AgentProfile) {
+        saveProfileInternalList(listOf(profile))
+    }
+
+    private fun saveProfileInternalList(profiles: List<AgentProfile>) {
+        profilePrefs.edit().putString("profiles", gson.toJson(profiles)).apply()
+    }
+
+    // ========== 兼容旧版 DataStore 流（模型配置 / 用户信息） ==========
 
     val apiUrl: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[API_URL] ?: DEFAULT_API_URL
@@ -52,44 +212,45 @@ class SettingsManager(private val context: Context) {
         preferences[MODEL_NAME] ?: DEFAULT_MODEL
     }
 
-    val agentAvatar: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[AGENT_AVATAR] ?: DEFAULT_AGENT_AVATAR
-    }
-
     val userAvatar: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[USER_AVATAR] ?: DEFAULT_USER_AVATAR
-    }
-
-    val agentAvatarUri: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[AGENT_AVATAR_URI] ?: ""
     }
 
     val userAvatarUri: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[USER_AVATAR_URI] ?: ""
     }
 
-    val agentName: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[AGENT_NAME] ?: DEFAULT_AGENT_NAME
-    }
-
-    val agentGender: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[AGENT_GENDER] ?: DEFAULT_AGENT_GENDER
-    }
-
-    val agentAge: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[AGENT_AGE] ?: DEFAULT_AGENT_AGE
-    }
-
-    val agentPersona: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[AGENT_PERSONA] ?: DEFAULT_AGENT_PERSONA
-    }
-
-    val agentGlobalSettings: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[AGENT_GLOBAL_SETTINGS] ?: ""
-    }
-
     val userNickname: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[USER_NICKNAME] ?: DEFAULT_USER_NICKNAME
+    }
+
+    /** 当前角色的名字，优先角色档案，回退旧字段。 */
+    val agentName: Flow<String> = combine(agentProfiles, currentAgentId) { list, id ->
+        list.find { it.id == id }?.name ?: DEFAULT_AGENT_NAME
+    }
+
+    val agentGender: Flow<String> = combine(agentProfiles, currentAgentId) { list, id ->
+        list.find { it.id == id }?.gender ?: DEFAULT_AGENT_GENDER
+    }
+
+    val agentAge: Flow<String> = combine(agentProfiles, currentAgentId) { list, id ->
+        list.find { it.id == id }?.age ?: DEFAULT_AGENT_AGE
+    }
+
+    val agentPersona: Flow<String> = combine(agentProfiles, currentAgentId) { list, id ->
+        list.find { it.id == id }?.persona ?: DEFAULT_AGENT_PERSONA
+    }
+
+    val agentGlobalSettings: Flow<String> = combine(agentProfiles, currentAgentId) { list, id ->
+        list.find { it.id == id }?.globalSettings ?: ""
+    }
+
+    val agentAvatar: Flow<String> = combine(agentProfiles, currentAgentId) { list, id ->
+        list.find { it.id == id }?.avatar ?: DEFAULT_AGENT_AVATAR
+    }
+
+    val agentAvatarUri: Flow<String> = combine(agentProfiles, currentAgentId) { list, id ->
+        list.find { it.id == id }?.avatarUri ?: ""
     }
 
     suspend fun saveApiSettings(url: String, key: String, model: String) {
@@ -100,35 +261,32 @@ class SettingsManager(private val context: Context) {
         }
     }
 
-    suspend fun saveAvatar(agent: String, user: String) {
-        context.dataStore.edit { preferences ->
-            preferences[AGENT_AVATAR] = agent
-            preferences[USER_AVATAR] = user
-        }
-    }
-
-    suspend fun saveAvatarUri(agentUri: String, userUri: String) {
-        context.dataStore.edit { preferences ->
-            preferences[AGENT_AVATAR_URI] = agentUri
-            preferences[USER_AVATAR_URI] = userUri
-        }
-    }
-
-    suspend fun saveAgentProfile(
-        name: String, gender: String, age: String, persona: String, globalSettings: String
-    ) {
-        context.dataStore.edit { preferences ->
-            preferences[AGENT_NAME] = name
-            preferences[AGENT_GENDER] = gender
-            preferences[AGENT_AGE] = age
-            preferences[AGENT_PERSONA] = persona
-            preferences[AGENT_GLOBAL_SETTINGS] = globalSettings
-        }
-    }
-
     suspend fun saveUserNickname(nickname: String) {
         context.dataStore.edit { preferences ->
             preferences[USER_NICKNAME] = nickname
         }
+    }
+
+    /** 保存用户头像（旧版 DataStore 字段）。 */
+    suspend fun saveUserAvatar(avatar: String, avatarUri: String) {
+        context.dataStore.edit { preferences ->
+            preferences[USER_AVATAR] = avatar
+            preferences[USER_AVATAR_URI] = avatarUri
+        }
+    }
+
+    /** 更新当前 AI 角色档案（编辑场景）。 */
+    suspend fun saveAgentProfile(
+        name: String, gender: String, age: String, persona: String, globalSettings: String
+    ) {
+        val current = currentAgentProfile.first() ?: return
+        updateAgentProfile(
+            current.copy(
+                name = name.ifBlank { DEFAULT_AGENT_NAME },
+                gender = gender.ifBlank { DEFAULT_AGENT_GENDER },
+                age = age.ifBlank { DEFAULT_AGENT_AGE },
+                persona = persona, globalSettings = globalSettings
+            )
+        )
     }
 }
