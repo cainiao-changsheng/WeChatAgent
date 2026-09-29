@@ -11,6 +11,7 @@ import com.wechat.agent.data.MomentsGenerator
 import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.TypingHabitTracker
+import com.wechat.agent.data.model.AgentStatus
 import com.wechat.agent.data.model.Chat
 import com.wechat.agent.data.model.EmotionState
 import com.wechat.agent.data.model.MemoryEntry
