@@ -305,8 +305,9 @@ fun AppNavigation() {
                 userNickname = userNickname,
                 onBack = { navController.popBackStack() },
                 onSave = { avatar, avatarUri, nickname ->
-                    if (avatar.isNotEmpty()) settingsViewModel.saveAvatar(agentAvatar, avatar)
-                    if (avatarUri.isNotEmpty()) settingsViewModel.saveAvatarUri(agentAvatarUri, avatarUri)
+                    if (avatar.isNotEmpty() || avatarUri.isNotEmpty()) {
+                        settingsViewModel.saveUserAvatar(avatar, avatarUri)
+                    }
                     if (nickname.isNotBlank()) settingsViewModel.saveUserNickname(nickname)
                     navController.popBackStack()
                 }

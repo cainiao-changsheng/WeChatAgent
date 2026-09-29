@@ -767,15 +767,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             model, apiKey,
                             prompt + " 这条动态附带了一张图片，请结合图片内容一起评论。",
                             imageDataUrl
-                        ).getOrElse { repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt))) }
+                        ).getOrElse { localReactionComment(state) }
                     } else {
                         repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                            .getOrElse { localReactionComment(state) }
                     }
                 } else {
                     repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                        .getOrElse { localReactionComment(state) }
                 }
-                result.getOrElse { localReactionComment(state) }
-                    .removePrefix("\"").removeSuffix("\"").trim().take(30)
+                result.removePrefix("\"").removeSuffix("\"").trim().take(30)
             } else {
                 localReactionComment(state)
             }

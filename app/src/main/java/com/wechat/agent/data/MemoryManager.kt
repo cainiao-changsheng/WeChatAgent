@@ -275,7 +275,7 @@ class MemoryManager(context: Context) {
             }
 
             // 格式 3：其他 JSON 对象，尝试按 MemoryEntry 列表解析
-            val entryList = try {
+            val entryList: List<MemoryEntry>? = try {
                 gson.fromJson(cleaned, object : TypeToken<List<MemoryEntry>>() {}.type)
             } catch (_: Exception) { null }
             if (!entryList.isNullOrEmpty()) {

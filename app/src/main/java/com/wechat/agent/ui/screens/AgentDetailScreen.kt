@@ -188,7 +188,7 @@ fun AgentDetailScreen(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    val memoryManager = remember { MemoryManager(context.applicationContext, agentId) }
+                    val memoryManager = remember { MemoryManager(context.applicationContext).also { it.setActiveAgent(agentId) } }
 
                     val exportJsonLauncher = rememberLauncherForActivityResult(
                         ActivityResultContracts.CreateDocument("application/json")

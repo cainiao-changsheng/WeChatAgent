@@ -85,10 +85,10 @@ class SettingsManager(private val context: Context) {
     )
     val currentAgentId: StateFlow<String> = _currentAgentId.asStateFlow()
 
-    val currentAgentProfile: StateFlow<AgentProfile?> =
+    val currentAgentProfile: Flow<AgentProfile?> =
         combine(agentProfiles, currentAgentId) { list, id ->
             list.find { it.id == id } ?: list.firstOrNull()
-        }.asStateFlow()
+        }
 
     init {
         // 首次启动迁移：旧单角色配置构建默认角色档案
