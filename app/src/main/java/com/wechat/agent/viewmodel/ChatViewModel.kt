@@ -87,6 +87,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _agentStatus = MutableStateFlow(AgentStatus())
     val agentStatus = _agentStatus.asStateFlow()
 
+    /** 用户是否正在输入（聊天界面输入框非空），输入中时 AI 不主动插话 */
+    private val _userTyping = MutableStateFlow(false)
+    val userTyping = _userTyping.asStateFlow()
+
+    fun setUserTyping(typing: Boolean) {
+        _userTyping.value = typing
+    }
+
     private var streamingJob: Job? = null
     private var deliveryJob: Job? = null
     private var statusJob: Job? = null

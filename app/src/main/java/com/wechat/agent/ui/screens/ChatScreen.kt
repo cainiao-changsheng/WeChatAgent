@@ -180,12 +180,14 @@ fun ChatScreen(
                     inputText = inputText,
                     onInputChange = {
                         inputText = it
+                        onTypingChange(it.isNotEmpty())
                         if (it.isNotEmpty()) showEmojiPanel = false
                     },
                     onSend = {
                         if (inputText.isNotBlank()) {
                             onSendMessage(inputText.trim())
                             inputText = ""
+                            onTypingChange(false)
                         }
                     },
                     onPickImage = {
