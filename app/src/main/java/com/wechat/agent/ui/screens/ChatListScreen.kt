@@ -15,10 +15,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Explore
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -59,8 +59,7 @@ fun ChatListScreen(
     onChatClick: (String) -> Unit,
     onNewChat: () -> Unit,
     onDeleteChat: (String) -> Unit,
-    onNavigateToSettings: () -> Unit,
-    onNavigateToMoments: () -> Unit
+    bottomBar: @Composable () -> Unit = {}
 ) {
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
@@ -68,21 +67,23 @@ fun ChatListScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("消息", fontWeight = FontWeight.Bold) },
+                title = {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("微信", fontWeight = FontWeight.Medium)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 actions = {
-                    IconButton(onClick = onNavigateToMoments) {
-                        Icon(Icons.Default.Explore, contentDescription = "发现", tint = WeChatGreen)
+                    IconButton(onClick = {}) {
+                        Icon(Icons.Default.Search, contentDescription = "搜索", tint = WeChatGreen)
                     }
                     IconButton(onClick = onNewChat) {
                         Icon(Icons.Default.Add, contentDescription = "新建对话", tint = WeChatGreen)
                     }
-                    IconButton(onClick = onNavigateToSettings) {
-                        Text("⚙", fontSize = MaterialTheme.typography.titleLarge.fontSize)
-                    }
                 }
             )
-        }
+        },
+        bottomBar = { bottomBar() }
     ) { padding ->
         if (chats.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
@@ -131,35 +132,44 @@ fun ChatListItem(chat: Chat, agentAvatar: String = "🤖", agentAvatarUri: Strin
     val timeStr = if (now - chat.lastTime > 24 * 60 * 60 * 1000)
         dateFormat.format(Date(chat.lastTime)) else timeFormat.format(Date(chat.lastTime))
 
-    Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier.size(52.dp).clip(CircleShape).background(WeChatGreen),
-            contentAlignment = Alignment.Center
+    Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            if (agentAvatarUri.isNotEmpty()) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context).data(Uri.parse(agentAvatarUri)).crossfade(true).build(),
-                    contentDescription = "", modifier = Modifier.fillMaxSize().clip(CircleShape),
-                    contentScale = ContentScale.Crop)
-            } else {
-                Text(agentAvatar, fontSize = MaterialTheme.typography.headlineMedium.fontSize)
+            Box(
+                modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(WeChatGreen),
+                contentAlignment = Alignment.Center
+            ) {
+                if (agentAvatarUri.isNotEmpty()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context).data(Uri.parse(agentAvatarUri)).crossfade(true).build(),
+                        contentDescription = "", modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop)
+                } else {
+                    Text(agentAvatar, fontSize = MaterialTheme.typography.headlineMedium.fontSize)
+                }
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(chat.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(timeStr, style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(chat.lastMessage.ifEmpty { "暂无消息" }, style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(chat.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(timeStr, style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(chat.lastMessage.ifEmpty { "暂无消息" }, style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 80.dp, end = 16.dp)
+                .height(0.5.dp)
+                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+        )
     }
 }

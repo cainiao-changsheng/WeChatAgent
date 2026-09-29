@@ -29,15 +29,17 @@ private val DarkColorScheme = darkColorScheme(
     primaryContainer = DarkSelfBubble,
     secondary = WeChatGreenDark,
     background = WeChatBgDark,
-    surface = DarkOtherBubble,
+    surface = WeChatSurfaceDark,
     onBackground = White,
     onSurface = White,
-    surfaceVariant = Gray900
+    surfaceVariant = WeChatInputDark,
+    outline = WeChatDividerDark,
+    outlineVariant = WeChatDividerDark
 )
 
 @Composable
 fun WeChatAgentTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme

@@ -9,6 +9,9 @@ val WeChatGreenLight = Color(0xFFE8F8EF)
 
 val WeChatBg = Color(0xFFEDEDED)
 val WeChatBgDark = Color(0xFF191919)
+val WeChatSurfaceDark = Color(0xFF1E1E1E)
+val WeChatInputDark = Color(0xFF2C2C2C)
+val WeChatDividerDark = Color(0xFF232323)
 
 val White = Color(0xFFFFFFFF)
 val Black = Color(0xFF111111)

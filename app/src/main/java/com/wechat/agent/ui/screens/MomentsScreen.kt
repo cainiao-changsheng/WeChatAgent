@@ -68,10 +68,12 @@ fun MomentsScreen(
     agentAvatarUri: String = "",
     posts: List<MomentPost>,
     isLoading: Boolean,
-    onBack: () -> Unit,
+    onBack: () -> Unit = {},
+    showBack: Boolean = true,
     onGenerateNew: () -> Unit,
     onToggleLike: (String) -> Unit,
-    onPostMoment: (String) -> Unit
+    onPostMoment: (String) -> Unit,
+    bottomBar: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -81,10 +83,16 @@ fun MomentsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Agent 动态", fontWeight = FontWeight.Bold) },
+                title = {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("朋友圈", fontWeight = FontWeight.Medium)
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        }
                     }
                 },
                 actions = {
@@ -106,7 +114,8 @@ fun MomentsScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
-        }
+        },
+        bottomBar = { bottomBar() }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             // 发布动态输入区

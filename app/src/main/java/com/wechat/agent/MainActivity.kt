@@ -9,9 +9,12 @@ import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.wechat.agent.ui.components.WeChatBottomBar
 import com.wechat.agent.ui.screens.ChatListScreen
 import com.wechat.agent.ui.screens.ChatScreen
+import com.wechat.agent.ui.screens.ContactsScreen
 import com.wechat.agent.ui.screens.MomentsScreen
 import com.wechat.agent.ui.screens.SettingsScreen
 import com.wechat.agent.ui.theme.WeChatAgentTheme
@@ -32,6 +35,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route ?: "chatList"
     val chatViewModel: ChatViewModel = viewModel()
     val settingsViewModel: SettingsViewModel = viewModel()
 
@@ -54,8 +59,32 @@ fun AppNavigation() {
                 onChatClick = { chatId -> chatViewModel.selectChat(chatId); navController.navigate("chat/$chatId") },
                 onNewChat = { navController.navigate("chat/${chatViewModel.createNewChat()}") },
                 onDeleteChat = { chatViewModel.deleteChat(it) },
-                onNavigateToSettings = { navController.navigate("settings") },
-                onNavigateToMoments = { navController.navigate("moments") }
+                bottomBar = {
+                    WeChatBottomBar(
+                        currentRoute = currentRoute,
+                        onTabSelected = { route -> navigateToTab(navController, route) }
+                    )
+                }
+            )
+        }
+
+        composable("contacts") {
+            ContactsScreen(
+                chats = chats, agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
+                onOpenAgentChat = {
+                    if (chats.isNotEmpty()) {
+                        chatViewModel.selectChat(chats.first().id)
+                        navController.navigate("chat/${chats.first().id}")
+                    } else {
+                        navController.navigate("chat/${chatViewModel.createNewChat()}")
+                    }
+                },
+                bottomBar = {
+                    WeChatBottomBar(
+                        currentRoute = currentRoute,
+                        onTabSelected = { route -> navigateToTab(navController, route) }
+                    )
+                }
             )
         }
 
@@ -83,15 +112,40 @@ fun AppNavigation() {
             MomentsScreen(
                 agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
                 posts = momentPosts, isLoading = false,
+                showBack = false,
                 onBack = { navController.popBackStack() },
                 onGenerateNew = { chatViewModel.generateMomentsPost() },
                 onToggleLike = { chatViewModel.toggleLike(it) },
-                onPostMoment = { chatViewModel.postUserMoment(it) }
+                onPostMoment = { chatViewModel.postUserMoment(it) },
+                bottomBar = {
+                    WeChatBottomBar(
+                        currentRoute = currentRoute,
+                        onTabSelected = { route -> navigateToTab(navController, route) }
+                    )
+                }
             )
         }
 
         composable("settings") {
-            SettingsScreen(viewModel = settingsViewModel, onBack = { navController.popBackStack() })
+            SettingsScreen(
+                viewModel = settingsViewModel,
+                showBack = false,
+                onBack = { navController.popBackStack() },
+                bottomBar = {
+                    WeChatBottomBar(
+                        currentRoute = currentRoute,
+                        onTabSelected = { route -> navigateToTab(navController, route) }
+                    )
+                }
+            )
         }
+    }
+}
+
+private fun navigateToTab(navController: androidx.navigation.NavHostController, route: String) {
+    navController.navigate(route) {
+        popUpTo(navController.graph.startDestinationId) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }

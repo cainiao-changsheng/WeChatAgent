@@ -70,7 +70,9 @@ import com.wechat.agent.viewmodel.SettingsViewModel
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit = {},
+    showBack: Boolean = true,
+    bottomBar: @Composable () -> Unit = {}
 ) {
     val apiUrl by viewModel.apiUrl.collectAsState()
     val apiKey by viewModel.apiKey.collectAsState()
@@ -125,18 +127,25 @@ fun SettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("设置", fontWeight = FontWeight.Medium) },
+                title = {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("我", fontWeight = FontWeight.Medium)
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = ""
-                        )
+                    if (showBack) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = ""
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
+        bottomBar = { bottomBar() },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         Column(
