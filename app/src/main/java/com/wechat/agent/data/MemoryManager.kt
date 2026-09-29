@@ -257,7 +257,7 @@ class MemoryManager(context: Context) {
             }
 
             // 格式 2：纯字符串数组（每条字符串是一条记忆）
-            val stringList = try {
+            val stringList: List<String>? = try {
                 gson.fromJson(cleaned, object : TypeToken<List<String>>() {}.type)
             } catch (_: Exception) { null }
             if (!stringList.isNullOrEmpty()) {

@@ -674,22 +674,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val prompt = "$contextHint 对方回复: \"${userComment.take(60)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
                     "请以AI伴侣的身份，回一条简短自然的回复（15字以内），像真人回复评论一样自然，可以就此打住，不要引号和任何符号前缀。直接输出。"
                 val result = if (post.imageUri.isNotBlank()) {
-                    // 动态带图：若模型支持识图则结合图片内容回复
+                    // 动态带图：若模型支持识图则结合图片内容回复，失败降级本地兜底
                     val imageDataUrl = readImageAsBase64(post.imageUri)
                     if (imageDataUrl != null) {
                         repository.sendVisionMessage(
                             model, apiKey,
                             prompt + " 这条动态附带了一张图片，请结合图片内容一起回复。",
                             imageDataUrl
-                        ).getOrElse { repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt))) }
+                        ).getOrElse { localReplyToComment() }
                     } else {
                         repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                            .getOrElse { localReplyToComment() }
                     }
                 } else {
                     repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                        .getOrElse { localReplyToComment() }
                 }
-                result.getOrElse { localReplyToComment() }
-                    .removePrefix("\"").removeSuffix("\"").trim().take(30)
+                result.removePrefix("\"").removeSuffix("\"").trim().take(30)
             } else {
                 localReplyToComment()
             }
