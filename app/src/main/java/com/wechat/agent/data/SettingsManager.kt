@@ -91,22 +91,8 @@ class SettingsManager(private val context: Context) {
         }
 
     init {
-        // 首次启动迁移：旧单角色配置构建默认角色档案
-        if (_agentProfiles.value.isEmpty()) {
-            val defaultProfile = AgentProfile(
-                id = DEFAULT_AGENT_ID,
-                name = DEFAULT_AGENT_NAME,
-                gender = DEFAULT_AGENT_GENDER,
-                age = DEFAULT_AGENT_AGE,
-                persona = DEFAULT_AGENT_PERSONA,
-                globalSettings = "",
-                avatar = DEFAULT_AGENT_AVATAR,
-                avatarUri = ""
-            )
-            saveProfileInternal(defaultProfile)
-            profilePrefs.edit().putString("current_agent_id", DEFAULT_AGENT_ID).apply()
-            _currentAgentId.value = DEFAULT_AGENT_ID
-        }
+        // 初始不再自动创建默认 AI 好友：初次打开 App 默认无好友，需用户手动添加。
+        // 已存在档案的存量用户不受影响。
     }
 
     fun addAgentProfile(

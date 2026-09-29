@@ -80,6 +80,7 @@ import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.model.Message
 import com.wechat.agent.data.model.MessageStatus
 import com.wechat.agent.data.model.Role
+import com.wechat.agent.ui.components.CenteredTopBar
 import com.wechat.agent.ui.theme.DarkOtherBubble
 import com.wechat.agent.ui.theme.DarkSelfBubble
 import com.wechat.agent.ui.theme.OtherBubble
@@ -140,8 +141,8 @@ fun ChatScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
+            CenteredTopBar(
+                content = {
                     Row(
                         modifier = Modifier.clickable(onClick = onAvatarClick),
                         verticalAlignment = Alignment.CenterVertically
@@ -174,18 +175,14 @@ fun ChatScreen(
                         }
                     }
                 },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
+                showBack = true,
+                onBack = onBack,
                 actions = {
                     IconButton(onClick = onOpenMusicApp) {
                         Icon(Icons.Default.MusicNote, contentDescription = "打开音乐",
                             tint = WeChatGreen, modifier = Modifier.size(22.dp))
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                }
             )
         },
 

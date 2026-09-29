@@ -254,6 +254,31 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) {}
     }
 
+    /**
+     * 构建当前扮演好友的角色设定提示词。
+     * 需求：大模型第一次扮演某一位好友时，必须先读取好友设定和记忆后再回复用户。
+     * 每次回复前都会把完整设定（名字/性别/年龄/性格/全局设定）注入 system prompt，
+     * 配合 MemoryManager 的独立记忆库，保证角色扮演一致性。
+     */
+    private fun buildPersonaPrompt(agentId: String?): String {
+        val targetId = agentId?.takeIf { it.isNotBlank() }
+        val profile = targetId?.let { id ->
+            settingsManager.agentProfiles.value.find { it.id == id }
+        } ?: return ""
+        return buildString {
+            appendLine("【好友设定 - 你现在扮演的角色】")
+            appendLine("你的名字：${profile.name}")
+            appendLine("性别：${profile.gender}，年龄：${profile.age}")
+            if (profile.persona.isNotBlank()) {
+                appendLine("性格与说话风格设定：${profile.persona}")
+            }
+            if (profile.globalSettings.isNotBlank()) {
+                appendLine("全局设定：${profile.globalSettings}")
+            }
+            appendLine("你们已经认识并且有共同记忆，回复前请先回忆记忆库中与对方的相处记忆，严格遵循以上设定来扮演这位好友，不要说破自己是 AI。")
+        }
+    }
+
     /** AI 主动联系用户：在聊天中插入一条由 AI 性格驱动的主动消息。 */
     private fun sendProactiveContact(reason: String) {
         viewModelScope.launch {
@@ -265,7 +290,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val model = settingsManager.modelName.first()
                 val state = _emotionState.value
                 val content = if (apiKey.isNotEmpty()) {
-                    val prompt = "你现在想主动联系对方。原因: $reason。请像真人发微信一样，用一两句自然的话开启聊天，不要任何符号前缀，不要解释原因本身。直接输出这句话。"
+                    val persona = buildPersonaPrompt(chatId.let { cid -> _chats.value.find { it.id == cid }?.agentId })
+                    val prompt = (if (persona.isNotBlank()) "$persona\n\n" else "") +
+                        "你现在想主动联系对方。原因: $reason。请像真人发微信一样，用一两句自然的话开启聊天，不要任何符号前缀，不要解释原因本身。直接输出这句话。"
                     repository.sendMessage(model, apiKey,
                         listOf(ChatMessage(role = "user", content = prompt)))
                         .getOrElse { "刚想到你啦，在干嘛呢？" }
@@ -447,6 +474,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 val emotionDesc = "好感度${finalState.affinity}/100·${finalState.mood.label}"
                 val moodDesc = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
+                repository.personaPrompt = buildPersonaPrompt(_chats.value.find { it.id == chatId }?.agentId)
                 val chatMessages = repository.buildChatMessages(model, _currentMessages.value, emotionDesc, moodDesc)
 
                 var fullReply = ""
@@ -917,6 +945,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         saveChatsToStorage()
     }
 
+    /** 删除某位好友（agentId）关联的全部聊天会话，用于删除好友时清理。 */
+    fun deleteChatsByAgent(agentId: String) {
+        val removedIds = _chats.value.filter { it.agentId == agentId }.map { it.id }.toSet()
+        _chats.value = _chats.value.filter { it.agentId != agentId }
+        if (_currentChatId.value in removedIds) {
+            _currentChatId.value = null
+            _currentMessages.value = emptyList()
+        }
+        saveChatsToStorage()
+    }
+
     fun sendImageMessage(uri: String) {
         val now = System.currentTimeMillis()
         val chatId = _currentChatId.value ?: createNewChat()
@@ -949,6 +988,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 val emotionDesc = "好感度${finalState.affinity}/100·${finalState.mood.label}"
                 val moodDesc = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
+                repository.personaPrompt = buildPersonaPrompt(_chats.value.find { it.id == chatId }?.agentId)
                 val chatMessages = repository.buildChatMessages(model, updatedMessages, emotionDesc, moodDesc)
 
                 var fullReply = ""

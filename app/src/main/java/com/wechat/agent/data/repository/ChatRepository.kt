@@ -18,6 +18,9 @@ class ChatRepository(private val memoryManager: MemoryManager) {
 
     var formatRule: String = ""
 
+    /** 当前扮演好友的设定（由 ViewModel 在每次回复前注入，保证首次扮演先读设定与记忆）。 */
+    var personaPrompt: String = ""
+
     suspend fun buildChatMessages(
         model: String,
         messages: List<com.wechat.agent.data.model.Message>,
@@ -30,6 +33,10 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         val systemPrompt = buildString {
             appendLine(identity)
             appendLine()
+            if (personaPrompt.isNotBlank()) {
+                appendLine(personaPrompt)
+                appendLine()
+            }
             if (formatRule.isNotEmpty()) {
                 appendLine(formatRule)
                 appendLine()

@@ -1,5 +1,9 @@
 package com.wechat.agent.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,19 +24,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,9 +39,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.wechat.agent.ui.components.CenteredTopBar
 import com.wechat.agent.ui.theme.WeChatGreen
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -70,6 +73,21 @@ fun AgentSetupScreen(
     var globalSettings by remember { mutableStateOf(initialGlobalSettings) }
     var avatar by remember { mutableStateOf(initialAvatar) }
     var avatarUri by remember { mutableStateOf(initialAvatarUri) }
+    val context = LocalContext.current
+
+    val galleryLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    it, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            avatar = ""
+            avatarUri = it.toString()
+        }
+    }
 
     fun doSave() {
         val finalName = name.trim().ifEmpty { "AI伴侣" }
@@ -79,18 +97,10 @@ fun AgentSetupScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text(if (isEdit) "编辑 AI 好友" else "新增 AI 好友", fontWeight = FontWeight.Medium)
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+            CenteredTopBar(
+                content = { Text(if (isEdit) "编辑 AI 好友" else "新增 AI 好友", fontWeight = FontWeight.Medium) },
+                showBack = true,
+                onBack = onBack
             )
         }
     ) { padding ->
@@ -101,19 +111,29 @@ fun AgentSetupScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // 头像（仅展示默认头像，不再提供“从相册上传”按钮）
+            // 头像：点击可更换自定义头像
             Text("头像", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
-            Text("每个 AI 好友拥有独立的默认头像", style = MaterialTheme.typography.bodySmall,
+            Text("点击头像可从相册更换自定义图片", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(8.dp))
 
             Box(
                 modifier = Modifier.size(72.dp).clip(CircleShape)
-                    .background(WeChatGreen.copy(alpha = 0.15f)),
+                    .background(WeChatGreen.copy(alpha = 0.15f))
+                    .clickable { galleryLauncher.launch("image/*") },
                 contentAlignment = Alignment.Center
             ) {
-                Text(avatar.ifEmpty { "🤖" }, fontSize = MaterialTheme.typography.displaySmall.fontSize)
+                if (avatarUri.isNotEmpty()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context).data(Uri.parse(avatarUri)).crossfade(true).build(),
+                        contentDescription = "好友头像",
+                        modifier = Modifier.fillMaxSize().clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Text(avatar.ifEmpty { "🤖" }, fontSize = MaterialTheme.typography.displaySmall.fontSize)
+                }
             }
 
             Spacer(modifier = Modifier.height(20.dp))

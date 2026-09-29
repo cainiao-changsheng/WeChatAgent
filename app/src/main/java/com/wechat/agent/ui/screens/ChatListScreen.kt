@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -30,8 +29,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +44,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.wechat.agent.data.model.AgentProfile
 import com.wechat.agent.data.model.Chat
+import com.wechat.agent.ui.components.CenteredTopBar
 import com.wechat.agent.ui.theme.WeChatGreen
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -59,6 +58,7 @@ fun ChatListScreen(
     chats: List<Chat>,
     agentAvatar: String = "🤖",
     agentAvatarUri: String = "",
+    profiles: List<AgentProfile> = emptyList(),
     onChatClick: (String) -> Unit,
     onNewChat: () -> Unit,
     onDeleteChat: (String) -> Unit,
@@ -69,19 +69,21 @@ fun ChatListScreen(
     var searchQuery by remember { mutableStateOf("") }
     val context = LocalContext.current
 
-    val filteredChats = remember(chats, searchQuery) {
+    val filteredChats = remember(chats, searchQuery, profiles) {
         if (searchQuery.isBlank()) chats
         else chats.filter {
             it.title.contains(searchQuery, ignoreCase = true) ||
-                it.lastMessage.contains(searchQuery, ignoreCase = true)
+                it.lastMessage.contains(searchQuery, ignoreCase = true) ||
+                (it.agentId.isNotBlank() && profiles.any { p -> p.id == it.agentId && p.name.contains(searchQuery, ignoreCase = true) })
         }
     }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    if (searching) {
+            CenteredTopBar(
+                content = { Text("聊天", fontWeight = FontWeight.Medium) },
+                fullWidthContent = if (searching) {
+                    {
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
@@ -89,13 +91,8 @@ fun ChatListScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth()
                         )
-                    } else {
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text("聊天", fontWeight = FontWeight.Medium)
-                        }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
+                } else null,
                 actions = {
                     Row(
                         modifier = Modifier.padding(end = 4.dp),
@@ -139,8 +136,17 @@ fun ChatListScreen(
         } else {
             LazyColumn(Modifier.fillMaxSize().padding(padding)) {
                 items(displayList, key = { it.id }) { chat ->
-                    ChatListItem(chat = chat, agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
-                        onClick = { onChatClick(chat.id) }, onLongClick = { showDeleteDialog = chat.id })
+                    val chatTitle = chat.agentId.takeIf { it.isNotBlank() }
+                        ?.let { aid -> profiles.firstOrNull { it.id == aid }?.name }
+                        ?: chat.title
+                    ChatListItem(
+                        chat = chat,
+                        titleOverride = chatTitle,
+                        agentAvatar = agentAvatar,
+                        agentAvatarUri = agentAvatarUri,
+                        onClick = { onChatClick(chat.id) },
+                        onLongClick = { showDeleteDialog = chat.id }
+                    )
                 }
             }
         }
@@ -163,6 +169,7 @@ fun ChatListScreen(
 
 @Composable
 fun ChatListItem(chat: Chat, agentAvatar: String = "🤖", agentAvatarUri: String = "",
+                 titleOverride: String? = null,
                  onClick: () -> Unit, onLongClick: () -> Unit) {
     val context = LocalContext.current
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
@@ -192,8 +199,11 @@ fun ChatListItem(chat: Chat, agentAvatar: String = "🤖", agentAvatarUri: Strin
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(chat.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    Text(
+                        titleOverride ?: chat.title,
+                        style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(timeStr, style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))

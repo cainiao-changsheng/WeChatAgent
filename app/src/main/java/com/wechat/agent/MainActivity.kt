@@ -188,6 +188,14 @@ fun AppNavigation() {
                 onSendMessage = {
                     val chatId = chatViewModel.openOrCreateChatWithAgent(profile.id)
                     navController.navigate("chat/$chatId")
+                },
+                onClearMemory = {
+                    // 记忆清除在 AgentDetailScreen 内直接处理（弹 Snackbar 反馈）
+                },
+                onDeleteAgent = {
+                    chatViewModel.deleteChatsByAgent(profile.id)
+                    settingsViewModel.deleteAgentProfile(profile.id)
+                    navController.popBackStack()
                 }
             )
         }

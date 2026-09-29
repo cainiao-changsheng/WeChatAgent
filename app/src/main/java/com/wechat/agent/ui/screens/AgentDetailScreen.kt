@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -38,14 +39,19 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -73,9 +79,18 @@ fun AgentDetailScreen(
     onBackupConfigChange: (intervalMinutes: Int, overwrite: Boolean, onExit: Boolean) -> Unit,
     onBack: () -> Unit,
     onEdit: () -> Unit,
-    onSendMessage: () -> Unit
+    onSendMessage: () -> Unit,
+    onClearMemory: () -> Unit,
+    onDeleteAgent: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val memoryManager = remember {
+        MemoryManager(context.applicationContext).also { it.setActiveAgent(agentId) }
+    }
+    var confirmAction by remember { mutableStateOf<String?>(null) }
+    val dangerRed = Color(0xFFE64340)
     Scaffold(
         topBar = {
             TopAppBar(
@@ -114,8 +129,6 @@ fun AgentDetailScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
-        val context = LocalContext.current
-        val scope = rememberCoroutineScope()
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -187,8 +200,6 @@ fun AgentDetailScreen(
                     Text("每个 AI 好友拥有独立的记忆库文件，支持导出/导入 .json 或 .md 格式", style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(12.dp))
-
-                    val memoryManager = remember { MemoryManager(context.applicationContext).also { it.setActiveAgent(agentId) } }
 
                     val exportJsonLauncher = rememberLauncherForActivityResult(
                         ActivityResultContracts.CreateDocument("application/json")
@@ -345,6 +356,34 @@ fun AgentDetailScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+
+            // ===== 危险操作：清除记忆 / 删除好友 =====
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { confirmAction = "clear" },
+                    modifier = Modifier.weight(1f).height(46.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)
+                ) { Text("清除记忆", color = dangerRed, fontWeight = FontWeight.Medium) }
+                Button(
+                    onClick = { confirmAction = "delete" },
+                    modifier = Modifier.weight(1f).height(46.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)
+                ) { Text("删除好友", color = dangerRed, fontWeight = FontWeight.Medium) }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "清除记忆将删除该好友的全部记忆数据；删除好友将移除好友及其全部聊天与记忆，操作均无法恢复",
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = dangerRed.copy(alpha = 0.7f)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "点击右上角设置可更改 AI 好友设定",
                 modifier = Modifier.fillMaxWidth(),
@@ -354,6 +393,39 @@ fun AgentDetailScreen(
             )
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    // ===== 确认弹窗：清除记忆 / 删除好友 =====
+    confirmAction?.let { action ->
+        val isDelete = action == "delete"
+        AlertDialog(
+            onDismissRequest = { confirmAction = null },
+            title = { Text(if (isDelete) "删除好友" else "清除记忆", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (isDelete) "确定要删除该好友吗？删除后将移除该好友及其全部聊天记录和记忆数据，该操作无法恢复。"
+                    else "确定要清除该好友的全部记忆吗？清除后记忆数据无法恢复，角色将从零开始认识你。"
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmAction = null
+                        if (isDelete) {
+                            onDeleteAgent()
+                        } else {
+                            scope.launch {
+                                memoryManager.clearMemory()
+                                snackbarHostState.showSnackbar("已清除该好友的记忆")
+                            }
+                        }
+                    }
+                ) { Text("确认", color = dangerRed, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmAction = null }) { Text("取消") }
+            }
+        )
     }
 }
 

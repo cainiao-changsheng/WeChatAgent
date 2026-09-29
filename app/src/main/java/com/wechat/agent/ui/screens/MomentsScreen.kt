@@ -40,8 +40,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.wechat.agent.data.model.MomentPost
+import com.wechat.agent.ui.components.CenteredTopBar
 import com.wechat.agent.ui.theme.WeChatGreen
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -85,32 +84,15 @@ fun MomentsScreen(
     val context = LocalContext.current
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val monthDayFormat = remember { SimpleDateFormat("MM月dd日", Locale.getDefault()) }
-    var deleteMode by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("朋友圈", fontWeight = FontWeight.Medium)
-                    }
-                },
-                navigationIcon = {
-                    if (showBack) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                        }
-                    }
-                },
+            CenteredTopBar(
+                content = { Text("朋友圈", fontWeight = FontWeight.Medium) },
+                showBack = showBack,
+                onBack = onBack,
                 actions = {
-                    IconButton(onClick = { deleteMode = !deleteMode }) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "删除动态",
-                            tint = if (deleteMode) MaterialTheme.colorScheme.error else WeChatGreen
-                        )
-                    }
                     IconButton(onClick = onComposeMoment) {
                         Icon(
                             Icons.Default.PhotoCamera,
@@ -118,8 +100,7 @@ fun MomentsScreen(
                             tint = WeChatGreen
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
+                }
             )
         },
         bottomBar = { bottomBar() }
@@ -152,7 +133,7 @@ fun MomentsScreen(
                             onAddComment = onAddComment,
                             timeFormat = timeFormat,
                             monthDayFormat = monthDayFormat,
-                            showDelete = deleteMode,
+                            showDelete = true,
                             onDeleteClick = { pendingDelete = post.id }
                         )
                     }
@@ -160,10 +141,6 @@ fun MomentsScreen(
                 }
             }
         }
-    }
-
-    if (deleteMode && posts.none { it.author == "我" }) {
-        deleteMode = false
     }
 
     pendingDelete?.let { postId ->
@@ -175,7 +152,6 @@ fun MomentsScreen(
                 androidx.compose.material3.TextButton(onClick = {
                     onDeletePost(postId)
                     pendingDelete = null
-                    deleteMode = false
                 }) { Text("删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
@@ -371,11 +347,6 @@ fun MomentPostCard(
                         )
 
                         Spacer(modifier = Modifier.weight(1f))
-
-                        Text(
-                            "🌐",
-                            fontSize = MaterialTheme.typography.bodySmall.fontSize
-                        )
                     }
 
                     // 评论输入

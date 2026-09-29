@@ -16,6 +16,18 @@
 | 8 | 界面：聊天标题显示好友昵称，点头像跳详情 | `ChatScreen` 增加 `onAvatarClick` 参数，TopAppBar 标题改为头像+昵称 Row，点击触发跳转 `agentDetail/{agentId}` |
 | 9 | 新增：仓库日志文件（本文件） | 仓库根目录新增 `UPDATE_LOG.md`，记录每次更新内容与实现方法 |
 
+## v1.0.2（2026-09-30）七项界面与功能改造
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 界面：朋友圈删除按钮移入用户动态卡片内，仅本人动态显示 | 新建 `CenteredTopBar.kt` 通用顶部栏（标题绝对居中于屏幕宽，支持 showBack/actions）；`MomentsScreen` 删除顶部垃圾桶，`MomentPostCard` 仅 `isUserPost` 时显示删除图标并接确认弹窗 |
+| 2 | 界面：去除蓝色球图标 | `MomentsScreen` 移除球图标相关展示，改用干净标题栏 |
+| 3 | 界面：所有导航标题绝对居中 | `MomentsScreen`/`ChatListScreen`/`ContactsScreen`/`MyProfileScreen`/`AgentSetupScreen`/`ChatScreen` 全部改用 `CenteredTopBar`，标题基于屏幕宽度居中 |
+| 4 | 界面：聊天列表显示角色名 | `ChatListScreen` 标题优先展示 `AgentProfile.name`（不再用首句消息） |
+| 5 | 功能：编辑好友可点头像换自定义图；初次使用无默认好友 | `AgentSetupScreen` 头像点击唤起相册（`galleryLauncher` + `takePersistableUriPermission`）；`SettingsManager.init` 移除自动建默认角色逻辑 |
+| 6 | 功能：首次扮演先读设定与记忆再回复 | `ChatRepository` 增加 `personaPrompt` 字段；`ChatViewModel.buildPersonaPrompt(agentId)` 在 `sendMessage`/`sendImageMessage`/`sendProactiveContact` 前注入设定与记忆 |
+| 7 | 功能：好友详情增加“清除记忆”“删除好友” | `MemoryManager` 新增 `clearMemory()`（清 L0/L1/L2 + 情绪）；`ChatViewModel` 新增 `deleteChatsByAgent(agentId)` 清会话；`AgentDetailScreen` 加危险操作按钮（红字）+ 确认 `AlertDialog`；`MainActivity` 接 `onClearMemory`/`onDeleteAgent`（删会话+删档案+返回） |
+
 ## v1.0.1-r28 编译修复（2026-09-30）
 
 | # | 修复项 | 实现方法 |

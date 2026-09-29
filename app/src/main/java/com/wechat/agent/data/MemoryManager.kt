@@ -231,6 +231,17 @@ class MemoryManager(context: Context) {
     }
 
     /**
+     * 清空当前角色全部记忆（L0/L1/L2 即时、日常、成长记忆）与情绪状态。
+     * 操作不可恢复，调用前必须经用户确认。
+     */
+    suspend fun clearMemory() = mutex.withLock {
+        MemoryType.values().forEach { type ->
+            prefs.edit().remove("mem_${type.name}").apply()
+        }
+        prefs.edit().remove("emotion_state").apply()
+    }
+
+    /**
      * 导入 JSON 记忆，兼容三种格式：
      * 1. MemoryBackup 结构对象（本应用导出）
      * 2. 纯字符串数组（如"记忆库_xxx.json"：每条字符串为一条记忆内容）
