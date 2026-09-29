@@ -24,8 +24,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -66,19 +66,21 @@ import java.util.Locale
 fun MomentsScreen(
     agentAvatar: String = "🤖",
     agentAvatarUri: String = "",
+    agentName: String = "AI伴侣",
+    userAvatar: String = "👤",
+    userAvatarUri: String = "",
     posts: List<MomentPost>,
     isLoading: Boolean,
     onBack: () -> Unit = {},
     showBack: Boolean = true,
-    onGenerateNew: () -> Unit,
+    onComposeMoment: () -> Unit,
     onToggleLike: (String) -> Unit,
-    onPostMoment: (String) -> Unit,
+    onAddComment: (String, String) -> Unit,
     bottomBar: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val monthDayFormat = remember { SimpleDateFormat("MM月dd日", Locale.getDefault()) }
-    var draft by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -96,20 +98,12 @@ fun MomentsScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onGenerateNew, enabled = !isLoading) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp,
-                                color = WeChatGreen
-                            )
-                        } else {
-                            Icon(
-                                Icons.Default.AutoAwesome,
-                                contentDescription = "生成新动态",
-                                tint = WeChatGreen
-                            )
-                        }
+                    IconButton(onClick = onComposeMoment) {
+                        Icon(
+                            Icons.Default.PhotoCamera,
+                            contentDescription = "发动态",
+                            tint = WeChatGreen
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -118,43 +112,6 @@ fun MomentsScreen(
         bottomBar = { bottomBar() }
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            // 发布动态输入区
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = draft,
-                    onValueChange = { draft = it },
-                    placeholder = { Text("发一条动态…") },
-                    modifier = Modifier.weight(1f),
-                    singleLine = false,
-                    maxLines = 3,
-                    shape = RoundedCornerShape(12.dp),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                IconButton(
-                    onClick = {
-                        if (draft.isNotBlank()) {
-                            onPostMoment(draft)
-                            draft = ""
-                        }
-                    },
-                    enabled = draft.isNotBlank(),
-                    modifier = Modifier.size(44.dp).clip(CircleShape).background(
-                        if (draft.isNotBlank()) WeChatGreen else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.Send,
-                        contentDescription = "发布",
-                        tint = if (draft.isNotBlank()) androidx.compose.ui.graphics.Color.White
-                               else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                    )
-                }
-            }
-
             if (posts.isEmpty() && !isLoading) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -163,7 +120,7 @@ fun MomentsScreen(
                         Text("还没有动态", style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text("在上面输入内容发布，或点击右上角 ✨ 让Agent发一条",
+                        Text("点击右上角相机发布动态，AI 好友会来互动",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f))
                     }
@@ -175,7 +132,11 @@ fun MomentsScreen(
                             post = post,
                             agentAvatar = agentAvatar,
                             agentAvatarUri = agentAvatarUri,
+                            agentName = agentName,
+                            userAvatar = userAvatar,
+                            userAvatarUri = userAvatarUri,
                             onToggleLike = onToggleLike,
+                            onAddComment = onAddComment,
                             timeFormat = timeFormat,
                             monthDayFormat = monthDayFormat
                         )
@@ -192,7 +153,11 @@ fun MomentPostCard(
     post: MomentPost,
     agentAvatar: String,
     agentAvatarUri: String,
+    agentName: String,
+    userAvatar: String,
+    userAvatarUri: String,
     onToggleLike: (String) -> Unit,
+    onAddComment: (String, String) -> Unit,
     timeFormat: SimpleDateFormat,
     monthDayFormat: SimpleDateFormat
 ) {
@@ -204,6 +169,8 @@ fun MomentPostCard(
         timeFormat.format(Date(post.timestamp))
     }
     val isUserPost = post.author == "我"
+    var showComments by remember { mutableStateOf(false) }
+    var commentDraft by remember { mutableStateOf("") }
 
     AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically(initialOffsetY = { it / 4 })) {
         Card(
@@ -218,14 +185,16 @@ fun MomentPostCard(
                     ),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (!isUserPost && agentAvatarUri.isNotEmpty()) {
+                    val displayUri = if (isUserPost) userAvatarUri else agentAvatarUri
+                    val displayAvatar = if (isUserPost) userAvatar else agentAvatar
+                    if (displayUri.isNotEmpty()) {
                         AsyncImage(
-                            model = ImageRequest.Builder(context).data(Uri.parse(agentAvatarUri)).crossfade(true).build(),
+                            model = ImageRequest.Builder(context).data(Uri.parse(displayUri)).crossfade(true).build(),
                             contentDescription = "", modifier = Modifier.fillMaxSize().clip(CircleShape),
                             contentScale = ContentScale.Crop)
                     } else {
                         Text(
-                            if (isUserPost) "👤" else agentAvatar,
+                            displayAvatar.ifEmpty { if (isUserPost) "👤" else "🤖" },
                             fontSize = MaterialTheme.typography.titleLarge.fontSize
                         )
                     }
@@ -248,11 +217,24 @@ fun MomentPostCard(
 
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    Text(
-                        text = post.content,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (post.content.isNotEmpty()) {
+                        Text(
+                            text = post.content,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+
+                    // 动态图片
+                    if (post.imageUri.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        AsyncImage(
+                            model = ImageRequest.Builder(context).data(Uri.parse(post.imageUri)).crossfade(true).build(),
+                            contentDescription = "动态图片",
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
 
                     if (post.mood.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(4.dp))
@@ -263,7 +245,7 @@ fun MomentPostCard(
                         )
                     }
 
-                    // AI 评论
+                    // 评论列表（点击展开）
                     if (post.comments.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Column(
@@ -271,18 +253,31 @@ fun MomentPostCard(
                                 .background(WeChatGreen.copy(alpha = 0.06f)).padding(horizontal = 8.dp, vertical = 6.dp),
                             verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
                         ) {
-                            post.comments.forEach { comment ->
+                            post.comments.takeLast(if (showComments) 20 else 3).forEach { raw ->
+                                val sep = raw.indexOf("::")
+                                val author = if (sep >= 0) raw.substring(0, sep)
+                                    .ifEmpty { if (post.author == "我") agentName else post.author } else agentName
+                                val text = if (sep >= 0) raw.substring(sep + 2) else raw
                                 Text(
-                                    "AI 伴侣: $comment",
+                                    "$author: $text",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                )
+                            }
+                            if (post.comments.size > 3 && !showComments) {
+                                Text(
+                                    "查看全部 ${post.comments.size} 条评论",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = WeChatGreen,
+                                    modifier = Modifier.clickable { showComments = true }
                                 )
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
+                    // 点赞 + 评论
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -292,9 +287,7 @@ fun MomentPostCard(
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
-                                imageVector = if (post.liked) Icons.Filled.Favorite else {
-                                    if (post.aiLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder
-                                },
+                                imageVector = if (post.liked || post.aiLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                                 contentDescription = "赞",
                                 tint = when {
                                     post.liked -> MaterialTheme.colorScheme.error
@@ -305,7 +298,6 @@ fun MomentPostCard(
                             )
                         }
                         Spacer(modifier = Modifier.width(4.dp))
-
                         Text(
                             text = post.likeCount.toString(),
                             style = MaterialTheme.typography.labelSmall,
@@ -318,13 +310,12 @@ fun MomentPostCard(
 
                         Spacer(modifier = Modifier.width(16.dp))
 
-                        if (post.commentCount > 0) {
-                            Text(
-                                "💬 ${post.commentCount}条评论",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
-                            )
-                        }
+                        Text(
+                            "💬 ${post.commentCount}条评论",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = WeChatGreen.copy(alpha = 0.8f),
+                            modifier = Modifier.clickable { showComments = !showComments }
+                        )
 
                         Spacer(modifier = Modifier.weight(1f))
 
@@ -332,6 +323,43 @@ fun MomentPostCard(
                             "🌐",
                             fontSize = MaterialTheme.typography.bodySmall.fontSize
                         )
+                    }
+
+                    // 评论输入
+                    if (showComments) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = commentDraft,
+                                onValueChange = { commentDraft = it },
+                                placeholder = { Text("评论…") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                maxLines = 1,
+                                shape = RoundedCornerShape(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            IconButton(
+                                onClick = {
+                                    if (commentDraft.isNotBlank()) {
+                                        onAddComment(post.id, commentDraft.trim())
+                                        commentDraft = ""
+                                    }
+                                },
+                                enabled = commentDraft.isNotBlank(),
+                                modifier = Modifier.size(36.dp).clip(CircleShape).background(
+                                    if (commentDraft.isNotBlank()) WeChatGreen
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = "发送评论",
+                                    tint = if (commentDraft.isNotBlank()) androidx.compose.ui.graphics.Color.White
+                                           else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                )
+                            }
+                        }
                     }
                 }
             }

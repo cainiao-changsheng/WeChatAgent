@@ -12,10 +12,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.wechat.agent.ui.components.WeChatBottomBar
+import com.wechat.agent.ui.screens.AgentDetailScreen
+import com.wechat.agent.ui.screens.AgentSetupScreen
 import com.wechat.agent.ui.screens.ChatListScreen
 import com.wechat.agent.ui.screens.ChatScreen
+import com.wechat.agent.ui.screens.ComposeMomentScreen
 import com.wechat.agent.ui.screens.ContactsScreen
+import com.wechat.agent.ui.screens.EditProfileScreen
 import com.wechat.agent.ui.screens.MomentsScreen
+import com.wechat.agent.ui.screens.MyProfileScreen
 import com.wechat.agent.ui.screens.SettingsScreen
 import com.wechat.agent.ui.theme.WeChatAgentTheme
 import com.wechat.agent.viewmodel.ChatViewModel
@@ -49,8 +54,23 @@ fun AppNavigation() {
     val userAvatar by settingsViewModel.userAvatar.collectAsState()
     val agentAvatarUri by settingsViewModel.agentAvatarUri.collectAsState()
     val userAvatarUri by settingsViewModel.userAvatarUri.collectAsState()
+    val agentName by settingsViewModel.agentName.collectAsState()
+    val userNickname by settingsViewModel.userNickname.collectAsState()
+    val agentGender by settingsViewModel.agentGender.collectAsState()
+    val agentAge by settingsViewModel.agentAge.collectAsState()
+    val agentPersona by settingsViewModel.agentPersona.collectAsState()
+    val agentGlobalSettings by settingsViewModel.agentGlobalSettings.collectAsState()
     val nowPlaying by chatViewModel.nowPlaying.collectAsState()
     val momentPosts by chatViewModel.momentsPosts.collectAsState()
+
+    fun openChatWithAgent() {
+        if (chats.isNotEmpty()) {
+            chatViewModel.selectChat(chats.first().id)
+            navController.navigate("chat/${chats.first().id}")
+        } else {
+            navController.navigate("chat/${chatViewModel.createNewChat()}")
+        }
+    }
 
     NavHost(navController = navController, startDestination = "chatList") {
         composable("chatList") {
@@ -71,20 +91,70 @@ fun AppNavigation() {
         composable("contacts") {
             ContactsScreen(
                 chats = chats, agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
-                onOpenAgentChat = {
-                    if (chats.isNotEmpty()) {
-                        chatViewModel.selectChat(chats.first().id)
-                        navController.navigate("chat/${chats.first().id}")
-                    } else {
-                        navController.navigate("chat/${chatViewModel.createNewChat()}")
-                    }
-                },
+                agentName = agentName,
+                onOpenAgentDetail = { navController.navigate("agentDetail") },
+                onNewFriendClick = { navController.navigate("agentSetup") },
                 bottomBar = {
                     WeChatBottomBar(
                         currentRoute = currentRoute,
                         onTabSelected = { route -> navigateToTab(navController, route) }
                     )
                 }
+            )
+        }
+
+        composable("agentSetup") {
+            AgentSetupScreen(
+                isEdit = false,
+                initialName = agentName,
+                initialGender = agentGender,
+                initialAge = agentAge,
+                initialPersona = agentPersona,
+                initialGlobalSettings = agentGlobalSettings,
+                initialAvatar = agentAvatar,
+                initialAvatarUri = agentAvatarUri,
+                onBack = { navController.popBackStack() },
+                onSave = { name, gender, age, persona, global, avatar, avatarUri ->
+                    settingsViewModel.saveAgentProfile(name, gender, age, persona, global)
+                    if (avatar.isNotEmpty()) settingsViewModel.saveAvatar(avatar, userAvatar)
+                    if (avatarUri.isNotEmpty()) settingsViewModel.saveAvatarUri(avatarUri, userAvatarUri)
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable("agentSetupEdit") {
+            AgentSetupScreen(
+                isEdit = true,
+                initialName = agentName,
+                initialGender = agentGender,
+                initialAge = agentAge,
+                initialPersona = agentPersona,
+                initialGlobalSettings = agentGlobalSettings,
+                initialAvatar = agentAvatar,
+                initialAvatarUri = agentAvatarUri,
+                onBack = { navController.popBackStack() },
+                onSave = { name, gender, age, persona, global, avatar, avatarUri ->
+                    settingsViewModel.saveAgentProfile(name, gender, age, persona, global)
+                    if (avatar.isNotEmpty()) settingsViewModel.saveAvatar(avatar, userAvatar)
+                    if (avatarUri.isNotEmpty()) settingsViewModel.saveAvatarUri(avatarUri, userAvatarUri)
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable("agentDetail") {
+            AgentDetailScreen(
+                agentName = agentName,
+                agentGender = agentGender,
+                agentAge = agentAge,
+                agentPersona = agentPersona,
+                agentGlobalSettings = agentGlobalSettings,
+                agentAvatar = agentAvatar,
+                agentAvatarUri = agentAvatarUri,
+                onBack = { navController.popBackStack() },
+                onEdit = { navController.navigate("agentSetupEdit") },
+                onSendMessage = { openChatWithAgent() }
             )
         }
 
@@ -111,12 +181,14 @@ fun AppNavigation() {
         composable("moments") {
             MomentsScreen(
                 agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
+                agentName = agentName,
+                userAvatar = userAvatar, userAvatarUri = userAvatarUri,
                 posts = momentPosts, isLoading = false,
                 showBack = false,
                 onBack = { navController.popBackStack() },
-                onGenerateNew = { chatViewModel.generateMomentsPost() },
+                onComposeMoment = { navController.navigate("composeMoment") },
                 onToggleLike = { chatViewModel.toggleLike(it) },
-                onPostMoment = { chatViewModel.postUserMoment(it) },
+                onAddComment = { postId, comment -> chatViewModel.addComment(postId, comment) },
                 bottomBar = {
                     WeChatBottomBar(
                         currentRoute = currentRoute,
@@ -126,16 +198,53 @@ fun AppNavigation() {
             )
         }
 
+        composable("composeMoment") {
+            ComposeMomentScreen(
+                onBack = { navController.popBackStack() },
+                onPublish = { content, imageUri ->
+                    chatViewModel.postUserMoment(content, imageUri)
+                    navController.popBackStack()
+                }
+            )
+        }
+
         composable("settings") {
-            SettingsScreen(
-                viewModel = settingsViewModel,
+            MyProfileScreen(
+                userAvatar = userAvatar, userAvatarUri = userAvatarUri,
+                userNickname = userNickname,
                 showBack = false,
                 onBack = { navController.popBackStack() },
+                onEditProfile = { navController.navigate("editProfile") },
+                onOpenMoments = { navigateToTab(navController, "moments") },
+                onOpenSettings = { navController.navigate("settingsDetail") },
                 bottomBar = {
                     WeChatBottomBar(
                         currentRoute = currentRoute,
                         onTabSelected = { route -> navigateToTab(navController, route) }
                     )
+                }
+            )
+        }
+
+        composable("settingsDetail") {
+            SettingsScreen(
+                viewModel = settingsViewModel,
+                showBack = true,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("editProfile") {
+            EditProfileScreen(
+                userAvatar = userAvatar,
+                userAvatarUri = userAvatarUri,
+                userNickname = userNickname,
+                onBack = { navController.popBackStack() },
+                onSave = { avatar, avatarUri, nickname ->
+                    if (avatar.isNotEmpty()) settingsViewModel.saveAvatar(agentAvatar, avatar)
+                    if (avatarUri.isNotEmpty()) settingsViewModel.saveAvatarUri(agentAvatarUri, avatarUri)
+                    if (nickname.isNotBlank()) settingsViewModel.saveUserNickname(nickname)
+                    navController.popBackStack()
                 }
             )
         }

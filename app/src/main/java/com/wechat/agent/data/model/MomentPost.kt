@@ -12,7 +12,8 @@ data class MomentPost(
     val author: String = "AI伴侣",
     val comments: List<String> = emptyList(),
     val aiLiked: Boolean = false,
-    val aiReacted: Boolean = false
+    val aiReacted: Boolean = false,
+    val imageUri: String = ""
 )
 
 enum class TimeCategory(val label: String, val emoji: String) {

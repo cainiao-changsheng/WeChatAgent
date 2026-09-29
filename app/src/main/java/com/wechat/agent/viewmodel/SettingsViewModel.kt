@@ -38,6 +38,24 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val userAvatarUri: StateFlow<String> = settingsManager.userAvatarUri
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
+    val agentName: StateFlow<String> = settingsManager.agentName
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_AGENT_NAME)
+
+    val agentGender: StateFlow<String> = settingsManager.agentGender
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_AGENT_GENDER)
+
+    val agentAge: StateFlow<String> = settingsManager.agentAge
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_AGENT_AGE)
+
+    val agentPersona: StateFlow<String> = settingsManager.agentPersona
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_AGENT_PERSONA)
+
+    val agentGlobalSettings: StateFlow<String> = settingsManager.agentGlobalSettings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
+    val userNickname: StateFlow<String> = settingsManager.userNickname
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_USER_NICKNAME)
+
     private val _saveSuccess = MutableStateFlow(false)
     val saveSuccess: StateFlow<Boolean> = _saveSuccess.asStateFlow()
 
@@ -59,6 +77,22 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun saveAvatarUri(agentUri: String, userUri: String) {
         viewModelScope.launch {
             settingsManager.saveAvatarUri(agentUri, userUri)
+            _saveSuccess.value = true
+        }
+    }
+
+    fun saveAgentProfile(
+        name: String, gender: String, age: String, persona: String, globalSettings: String
+    ) {
+        viewModelScope.launch {
+            settingsManager.saveAgentProfile(name, gender, age, persona, globalSettings)
+            _saveSuccess.value = true
+        }
+    }
+
+    fun saveUserNickname(nickname: String) {
+        viewModelScope.launch {
+            settingsManager.saveUserNickname(nickname)
             _saveSuccess.value = true
         }
     }

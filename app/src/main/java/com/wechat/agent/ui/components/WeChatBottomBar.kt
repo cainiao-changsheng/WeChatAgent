@@ -28,7 +28,7 @@ import com.wechat.agent.ui.theme.WeChatGreen
 data class WeChatTab(val route: String, val label: String)
 
 private val DefaultTabs = listOf(
-    WeChatTab("chatList", "微信"),
+    WeChatTab("chatList", "聊天"),
     WeChatTab("contacts", "通讯录"),
     WeChatTab("moments", "发现"),
     WeChatTab("settings", "我")

@@ -51,9 +51,11 @@ import com.wechat.agent.ui.theme.WeChatGreen
 @Composable
 fun ContactsScreen(
     chats: List<Chat>,
+    agentName: String = "AI伴侣",
     agentAvatar: String = "🤖",
     agentAvatarUri: String = "",
-    onOpenAgentChat: () -> Unit,
+    onOpenAgentDetail: () -> Unit,
+    onNewFriendClick: () -> Unit,
     bottomBar: @Composable () -> Unit = {}
 ) {
     Scaffold(
@@ -94,30 +96,31 @@ fun ContactsScreen(
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f))
             }
 
-            // Agent 联系人（点击进入聊天）
+            // Agent 联系人（点击进入角色详情）
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onOpenAgentChat)
+                    .clickable(onClick = onOpenAgentDetail)
                     .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 AgentAvatar(agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri)
                 Spacer(modifier = Modifier.width(12.dp))
                 Column {
-                    Text("Agent 伴侣", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                    Text(agentName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                     Spacer(modifier = Modifier.height(2.dp))
                     Text("24 小时在线的 AI 好友",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                Text("发消息", style = MaterialTheme.typography.bodySmall, color = WeChatGreen)
+                Text("详情", style = MaterialTheme.typography.bodySmall, color = WeChatGreen)
             }
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            ContactPlaceholderRow(icon = Icons.Default.PersonAdd, title = "新的朋友", tint = Color(0xFFFA9D3B))
+            ContactPlaceholderRow(icon = Icons.Default.PersonAdd, title = "新的朋友", tint = Color(0xFFFA9D3B),
+                onClick = onNewFriendClick)
             ContactPlaceholderRow(icon = Icons.Outlined.Groups, title = "群聊", tint = WeChatGreen)
             ContactPlaceholderRow(icon = Icons.Default.Tag, title = "标签", tint = Color(0xFF576B95))
             ContactPlaceholderRow(icon = Icons.Default.ShoppingBag, title = "公众号", tint = Color(0xFF576B95))
@@ -159,10 +162,11 @@ private fun AgentAvatar(agentAvatar: String, agentAvatarUri: String) {
 }
 
 @Composable
-private fun ContactPlaceholderRow(icon: ImageVector, title: String, tint: androidx.compose.ui.graphics.Color) {
+private fun ContactPlaceholderRow(icon: ImageVector, title: String, tint: androidx.compose.ui.graphics.Color, onClick: () -> Unit = {}) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

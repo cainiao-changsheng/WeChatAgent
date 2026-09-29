@@ -508,10 +508,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         saveMomentsToStorage()
     }
 
-    /** 用户发布朋友圈动态，并触发 AI 自主互动（根据条件判断是否点赞/评论）。 */
-    fun postUserMoment(content: String) {
+    /** 用户发布朋友圈动态（可带图片），并触发 AI 自主互动（根据条件判断是否点赞/评论）。 */
+    fun postUserMoment(content: String, imageUri: String = "") {
         val trimmed = content.trim()
-        if (trimmed.isEmpty()) return
+        if (trimmed.isEmpty() && imageUri.isEmpty()) return
         val now = System.currentTimeMillis()
         val post = MomentPost(
             id = UUID.randomUUID().toString(),
@@ -522,11 +522,83 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             commentCount = 0,
             liked = false,
             author = "我",
-            aiReacted = false
+            aiReacted = false,
+            imageUri = imageUri
         )
         _momentsPosts.value = _momentsPosts.value + post
         saveMomentsToStorage()
         reactToPost(post.id)
+    }
+
+    /** 用户评论动态，AI 角色会视心情/好感度选择是否回复。 */
+    fun addComment(postId: String, comment: String) {
+        val trimmed = comment.trim()
+        if (trimmed.isEmpty()) return
+        _momentsPosts.value = _momentsPosts.value.map { post ->
+            if (post.id == postId) post.copy(
+                commentCount = post.commentCount + 1,
+                comments = post.comments + listOf("我::$trimmed")
+            ) else post
+        }
+        saveMomentsToStorage()
+        aiReplyToComment(postId)
+    }
+
+    /** AI 对评论选择性回复：好感度越高、心情越好越容易回复。 */
+    private fun aiReplyToComment(postId: String) {
+        viewModelScope.launch {
+            try {
+                val post = _momentsPosts.value.find { it.id == postId } ?: return@launch
+                val state = _emotionState.value
+                val rand = Random.nextInt(100)
+                val willReply = when {
+                    state.affinity >= 70 -> rand < 85
+                    state.affinity >= 45 -> rand < 60
+                    state.affinity >= 25 -> rand < 35
+                    else -> rand < 15
+                }
+                if (!willReply) return@launch
+
+                val userComment = post.comments.lastOrNull() ?: return@launch
+                val reply = generateReplyToComment(state, userComment.removePrefix("我::"))
+                val agentName = settingsManager.agentName.first()
+
+                val updated = post.copy(
+                    commentCount = post.commentCount + 1,
+                    comments = post.comments + listOf("$agentName::$reply")
+                )
+                _momentsPosts.value = _momentsPosts.value.map { if (it.id == postId) updated else it }
+                saveMomentsToStorage()
+            } catch (_: Exception) {}
+        }
+    }
+
+    private suspend fun generateReplyToComment(state: EmotionState, userComment: String): String {
+        return try {
+            val apiKey = settingsManager.apiKey.first()
+            val model = settingsManager.modelName.first()
+            if (apiKey.isNotEmpty()) {
+                val prompt = "你正在看朋友圈，对方在你动态下评论: \"${userComment.take(60)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
+                    "请以AI伴侣的身份，回一条简短自然的回复（15字以内），像真人回复评论一样，不要引号和任何符号前缀。直接输出。"
+                repository.sendMessage(model, apiKey,
+                    listOf(ChatMessage(role = "user", content = prompt)))
+                    .getOrElse { localReplyToComment() }
+                    .removePrefix("\"").removeSuffix("\"").trim().take(30)
+            } else {
+                localReplyToComment()
+            }
+        } catch (_: Exception) {
+            localReplyToComment()
+        }
+    }
+
+    private fun localReplyToComment(): String {
+        val pool = listOf(
+            "哈哈被你发现了", "好呀好呀，听你的", "你这么一说我也觉得",
+            "嘿嘿，就知道你会来", "收到啦，谢谢关心", "嗯嗯，我也这么想的",
+            "那当然啦", "走，一起呀", "你眼光真好", "下次带你一起"
+        )
+        return pool.random()
     }
 
     /** AI 对用户动态互动：按好感度 / 心情 / 概率决定是否点赞、是否评论。 */
