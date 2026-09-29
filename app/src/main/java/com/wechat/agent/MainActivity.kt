@@ -24,6 +24,7 @@ import com.wechat.agent.ui.screens.ChatScreen
 import com.wechat.agent.ui.screens.ComposeMomentScreen
 import com.wechat.agent.ui.screens.ContactsScreen
 import com.wechat.agent.ui.screens.EditProfileScreen
+import com.wechat.agent.ui.screens.LabScreen
 import com.wechat.agent.ui.screens.ModelConfigScreen
 import com.wechat.agent.ui.screens.MomentsScreen
 import com.wechat.agent.ui.screens.MyProfileScreen

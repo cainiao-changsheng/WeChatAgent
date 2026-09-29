@@ -33,12 +33,12 @@ object UpdateChecker {
     /** 查询最新版本并和当前版本比较；网络/解析失败返回 null。 */
     suspend fun checkLatest(currentVersion: String): UpdateInfo? = withContext(Dispatchers.IO) {
         runCatching {
-            fetchReleaseFromApi() ?: fetchUpdateInfoFromRaw()
+            fetchReleaseFromApi(currentVersion) ?: fetchUpdateInfoFromRaw(currentVersion)
         }.getOrNull()
     }
 
     /** 主源：GitHub Releases API。 */
-    private suspend fun fetchReleaseFromApi(): UpdateInfo? = runCatching {
+    private suspend fun fetchReleaseFromApi(currentVersion: String): UpdateInfo? = runCatching {
         val req = Request.Builder()
             .url("https://api.github.com/repos/$REPO/releases/latest")
             .header("Accept", "application/vnd.github+json")
@@ -72,7 +72,7 @@ object UpdateChecker {
     }.getOrNull()
 
     /** 备用源：仓库内 update_info.json（raw 域名通常比 api.github.com 更易访问）。 */
-    private suspend fun fetchUpdateInfoFromRaw(): UpdateInfo? = runCatching {
+    private suspend fun fetchUpdateInfoFromRaw(currentVersion: String): UpdateInfo? = runCatching {
         val req = Request.Builder()
             .url("https://raw.githubusercontent.com/$REPO/$BRANCH/update_info.json")
             .header("User-Agent", "WeChatAgent")

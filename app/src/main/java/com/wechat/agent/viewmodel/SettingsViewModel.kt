@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.wechat.agent.data.AgentProfile
 import com.wechat.agent.data.AutoBackupConfig
 import com.wechat.agent.data.SettingsManager
+import com.wechat.agent.data.network.ApiModels.ChatMessage
+import com.wechat.agent.data.network.ApiModels.ChatRequest
 import com.wechat.agent.data.network.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
