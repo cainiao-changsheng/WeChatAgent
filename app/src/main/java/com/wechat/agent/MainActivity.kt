@@ -70,6 +70,7 @@ fun AppNavigation() {
                 moodText = moodText, nowPlaying = nowPlaying,
                 onBack = { navController.popBackStack() },
                 onSendMessage = { chatViewModel.sendMessage(it) },
+                onSendImage = { chatViewModel.sendImageMessage(it) },
                 onPlayMusic = { chatViewModel.playMusic() },
                 onPauseMusic = { chatViewModel.pauseMusic() },
                 onSkipNext = { chatViewModel.skipNextMusic() },
@@ -84,7 +85,8 @@ fun AppNavigation() {
                 posts = momentPosts, isLoading = false,
                 onBack = { navController.popBackStack() },
                 onGenerateNew = { chatViewModel.generateMomentsPost() },
-                onToggleLike = { chatViewModel.toggleLike(it) }
+                onToggleLike = { chatViewModel.toggleLike(it) },
+                onPostMoment = { chatViewModel.postUserMoment(it) }
             )
         }
 

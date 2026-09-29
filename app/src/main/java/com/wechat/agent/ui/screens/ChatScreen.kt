@@ -1,6 +1,9 @@
 package com.wechat.agent.ui.screens
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -19,21 +22,30 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +54,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -62,6 +75,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.wechat.agent.data.EmojiManager
 import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.model.Message
 import com.wechat.agent.data.model.MessageStatus
@@ -90,6 +104,7 @@ fun ChatScreen(
     nowPlaying: MusicController.NowPlaying = MusicController.NowPlaying(),
     onBack: () -> Unit,
     onSendMessage: (String) -> Unit,
+    onSendImage: (String) -> Unit,
     onPlayMusic: () -> Unit = {},
     onPauseMusic: () -> Unit = {},
     onSkipNext: () -> Unit = {},
@@ -97,9 +112,23 @@ fun ChatScreen(
     onOpenMusicApp: () -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
+    var showEmojiPanel by remember { mutableStateOf(false) }
+    var plusMenuExpanded by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val isDark = MaterialTheme.colorScheme.background == Color(0xFF191919)
     val context = LocalContext.current
+    val emojiManager = remember { EmojiManager(context) }
+    var emojis by remember { mutableStateOf(emojiManager.getAllEmojis()) }
+    var showAddEmojiDialog by remember { mutableStateOf(false) }
+    var newEmojiText by remember { mutableStateOf("") }
+
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            onSendImage(uri.toString())
+        }
+    }
 
     LaunchedEffect(messages.size, streamingContent) {
         if (messages.isNotEmpty() || streamingContent.isNotEmpty()) {
@@ -146,9 +175,43 @@ fun ChatScreen(
                         onOpenApp = onOpenMusicApp
                     )
                 }
-                ChatInputBar(inputText = inputText, onInputChange = { inputText = it },
-                    onSend = { if (inputText.isNotBlank()) { onSendMessage(inputText.trim()); inputText = "" } },
-                    enabled = !isLoading)
+                ChatInputBar(
+                    inputText = inputText,
+                    onInputChange = {
+                        inputText = it
+                        if (it.isNotEmpty()) showEmojiPanel = false
+                    },
+                    onSend = {
+                        if (inputText.isNotBlank()) {
+                            onSendMessage(inputText.trim())
+                            inputText = ""
+                        }
+                    },
+                    onPickImage = {
+                        imagePicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    onToggleEmoji = { showEmojiPanel = !showEmojiPanel; plusMenuExpanded = false },
+                    emojiSelected = showEmojiPanel,
+                    plusMenuExpanded = plusMenuExpanded,
+                    onPlusMenuChange = { plusMenuExpanded = it },
+                    enabled = !isLoading
+                )
+                AnimatedVisibility(visible = showEmojiPanel) {
+                    EmojiPanel(
+                        emojis = emojis,
+                        onEmojiClick = {
+                            inputText += it
+                            showEmojiPanel = false
+                        },
+                        onAddEmoji = { showAddEmojiDialog = true },
+                        onRemoveCustom = { emoji ->
+                            emojiManager.removeCustomEmoji(emoji)
+                            emojis = emojiManager.getAllEmojis()
+                        }
+                    )
+                }
             }
         }
     ) { padding ->
@@ -179,6 +242,33 @@ fun ChatScreen(
             }
             item { Spacer(modifier = Modifier.height(8.dp)) }
         }
+    }
+
+    if (showAddEmojiDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddEmojiDialog = false; newEmojiText = "" },
+            title = { Text("新增表情") },
+            text = {
+                OutlinedTextField(
+                    value = newEmojiText,
+                    onValueChange = { newEmojiText = it },
+                    placeholder = { Text("输入表情文字或 emoji...") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (emojiManager.addCustomEmoji(newEmojiText)) {
+                        emojis = emojiManager.getAllEmojis()
+                    }
+                    newEmojiText = ""
+                    showAddEmojiDialog = false
+                }) { Text("添加") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddEmojiDialog = false; newEmojiText = "" }) { Text("取消") }
+            }
+        )
     }
 }
 
@@ -225,14 +315,29 @@ fun MessageBubble(
 
             Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
                 modifier = Modifier.widthIn(max = 280.dp)) {
-                Box(
-                    modifier = Modifier.clip(RoundedCornerShape(
-                        topStart = if (isUser) 16.dp else 4.dp, topEnd = if (isUser) 4.dp else 16.dp,
-                        bottomStart = 16.dp, bottomEnd = 16.dp))
-                        .background(bubbleColor).padding(horizontal = 12.dp, vertical = 8.dp)
-                ) {
-                    Text(message.content, style = MaterialTheme.typography.bodyLarge,
-                        color = if (isUser && !isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface)
+                if (message.imageUri.isNotEmpty()) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context).data(Uri.parse(message.imageUri)).crossfade(true).build(),
+                        contentDescription = "图片消息",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(width = 200.dp, height = 200.dp)
+                            .clip(RoundedCornerShape(
+                                topStart = if (isUser) 16.dp else 4.dp, topEnd = if (isUser) 4.dp else 16.dp,
+                                bottomStart = 16.dp, bottomEnd = 16.dp))
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                }
+                if (message.content.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier.clip(RoundedCornerShape(
+                            topStart = if (isUser) 16.dp else 4.dp, topEnd = if (isUser) 4.dp else 16.dp,
+                            bottomStart = 16.dp, bottomEnd = 16.dp))
+                            .background(bubbleColor).padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(message.content, style = MaterialTheme.typography.bodyLarge,
+                            color = if (isUser && !isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface)
+                    }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -266,11 +371,29 @@ fun MessageBubble(
 }
 
 @Composable
-fun ChatInputBar(inputText: String, onInputChange: (String) -> Unit, onSend: () -> Unit, enabled: Boolean) {
+fun ChatInputBar(
+    inputText: String,
+    onInputChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onPickImage: () -> Unit,
+    onToggleEmoji: () -> Unit,
+    emojiSelected: Boolean,
+    plusMenuExpanded: Boolean,
+    onPlusMenuChange: (Boolean) -> Unit,
+    enabled: Boolean
+) {
     Row(
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        IconButton(onClick = onToggleEmoji, enabled = enabled) {
+            Icon(
+                Icons.Default.EmojiEmotions,
+                contentDescription = "表情",
+                tint = if (emojiSelected) WeChatGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
+        Spacer(modifier = Modifier.width(4.dp))
         OutlinedTextField(
             value = inputText, onValueChange = onInputChange, modifier = Modifier.weight(1f),
             placeholder = { Text("输入消息...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
@@ -280,19 +403,90 @@ fun ChatInputBar(inputText: String, onInputChange: (String) -> Unit, onSend: () 
                 focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                 unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant),
             maxLines = 4,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-            keyboardActions = KeyboardActions(onSend = { onSend() }),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
             enabled = enabled
         )
-        Spacer(modifier = Modifier.width(8.dp))
-        IconButton(
-            onClick = onSend, enabled = enabled && inputText.isNotBlank(),
-            modifier = Modifier.size(44.dp).clip(CircleShape).background(
-                if (inputText.isNotBlank() && enabled) WeChatGreen else MaterialTheme.colorScheme.surfaceVariant)
+        Spacer(modifier = Modifier.width(4.dp))
+        if (inputText.isBlank()) {
+            Box {
+                IconButton(
+                    onClick = { onPlusMenuChange(!plusMenuExpanded) },
+                    enabled = enabled,
+                    modifier = Modifier.size(44.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "更多",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
+                DropdownMenu(
+                    expanded = plusMenuExpanded,
+                    onDismissRequest = { onPlusMenuChange(false) }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("发送图片") },
+                        onClick = { onPlusMenuChange(false); onPickImage() },
+                        leadingIcon = { Icon(Icons.Default.Image, contentDescription = null) }
+                    )
+                }
+            }
+        } else {
+            IconButton(
+                onClick = onSend, enabled = enabled,
+                modifier = Modifier.size(44.dp).clip(CircleShape).background(
+                    if (enabled) WeChatGreen else MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送",
+                    tint = if (enabled) Color.White
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+            }
+        }
+    }
+}
+
+@Composable
+fun EmojiPanel(
+    emojis: List<String>,
+    onEmojiClick: (String) -> Unit,
+    onAddEmoji: () -> Unit,
+    onRemoveCustom: (String) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送",
-                tint = if (inputText.isNotBlank() && enabled) Color.White
-                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+            Text("表情", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            Spacer(modifier = Modifier.weight(1f))
+            TextButton(onClick = onAddEmoji) {
+                Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("新增表情", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(8),
+            modifier = Modifier.fillMaxWidth().height(200.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
+        ) {
+            gridItems(emojis) { emoji ->
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .padding(4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onEmojiClick(emoji) }
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(emoji, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
         }
     }
 }

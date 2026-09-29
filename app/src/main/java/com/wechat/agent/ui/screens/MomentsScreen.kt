@@ -20,8 +20,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -32,12 +34,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -67,11 +70,13 @@ fun MomentsScreen(
     isLoading: Boolean,
     onBack: () -> Unit,
     onGenerateNew: () -> Unit,
-    onToggleLike: (String) -> Unit
+    onToggleLike: (String) -> Unit,
+    onPostMoment: (String) -> Unit
 ) {
     val context = LocalContext.current
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val monthDayFormat = remember { SimpleDateFormat("MM月dd日", Locale.getDefault()) }
+    var draft by remember { mutableStateOf("") }
 
     Scaffold(
         topBar = {
@@ -103,34 +108,71 @@ fun MomentsScreen(
             )
         }
     ) { padding ->
-        if (posts.isEmpty() && !isLoading) {
-            Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("📱", fontSize = MaterialTheme.typography.headlineLarge.fontSize)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Agent 还没有发过动态", style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("点击右上角 ✨ 让Agent基于当前心情和记忆发布一条",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f))
-                }
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            // 发布动态输入区
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(posts.reversed(), key = { it.id }) { post ->
-                    MomentPostCard(
-                        post = post,
-                        agentAvatar = agentAvatar,
-                        agentAvatarUri = agentAvatarUri,
-                        onToggleLike = onToggleLike,
-                        timeFormat = timeFormat,
-                        monthDayFormat = monthDayFormat
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    placeholder = { Text("发一条动态…") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = false,
+                    maxLines = 3,
+                    shape = RoundedCornerShape(12.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(
+                    onClick = {
+                        if (draft.isNotBlank()) {
+                            onPostMoment(draft)
+                            draft = ""
+                        }
+                    },
+                    enabled = draft.isNotBlank(),
+                    modifier = Modifier.size(44.dp).clip(CircleShape).background(
+                        if (draft.isNotBlank()) WeChatGreen else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "发布",
+                        tint = if (draft.isNotBlank()) androidx.compose.ui.graphics.Color.White
+                               else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                     )
                 }
-                item { Spacer(modifier = Modifier.height(16.dp)) }
+            }
+
+            if (posts.isEmpty() && !isLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("📱", fontSize = MaterialTheme.typography.headlineLarge.fontSize)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("还没有动态", style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("在上面输入内容发布，或点击右上角 ✨ 让Agent发一条",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f))
+                    }
+                }
+            } else {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    items(posts.reversed(), key = { it.id }) { post ->
+                        MomentPostCard(
+                            post = post,
+                            agentAvatar = agentAvatar,
+                            agentAvatarUri = agentAvatarUri,
+                            onToggleLike = onToggleLike,
+                            timeFormat = timeFormat,
+                            monthDayFormat = monthDayFormat
+                        )
+                    }
+                    item { Spacer(modifier = Modifier.height(16.dp)) }
+                }
             }
         }
     }
@@ -152,6 +194,7 @@ fun MomentPostCard(
     } else {
         timeFormat.format(Date(post.timestamp))
     }
+    val isUserPost = post.author == "我"
 
     AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically(initialOffsetY = { it / 4 })) {
         Card(
@@ -161,16 +204,21 @@ fun MomentPostCard(
         ) {
             Row(modifier = Modifier.padding(12.dp)) {
                 Box(
-                    modifier = Modifier.size(44.dp).clip(CircleShape).background(WeChatGreen),
+                    modifier = Modifier.size(44.dp).clip(CircleShape).background(
+                        if (isUserPost) MaterialTheme.colorScheme.primary else WeChatGreen
+                    ),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (agentAvatarUri.isNotEmpty()) {
+                    if (!isUserPost && agentAvatarUri.isNotEmpty()) {
                         AsyncImage(
                             model = ImageRequest.Builder(context).data(Uri.parse(agentAvatarUri)).crossfade(true).build(),
                             contentDescription = "", modifier = Modifier.fillMaxSize().clip(CircleShape),
                             contentScale = ContentScale.Crop)
                     } else {
-                        Text(agentAvatar, fontSize = MaterialTheme.typography.titleLarge.fontSize)
+                        Text(
+                            if (isUserPost) "👤" else agentAvatar,
+                            fontSize = MaterialTheme.typography.titleLarge.fontSize
+                        )
                     }
                 }
 
@@ -178,9 +226,12 @@ fun MomentPostCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("AI 伴侣", style = MaterialTheme.typography.bodyMedium,
+                        Text(
+                            post.author,
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
-                            color = WeChatGreen)
+                            color = if (isUserPost) MaterialTheme.colorScheme.primary else WeChatGreen
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(timeDisplay, style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
@@ -203,6 +254,24 @@ fun MomentPostCard(
                         )
                     }
 
+                    // AI 评论
+                    if (post.comments.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Column(
+                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                                .background(WeChatGreen.copy(alpha = 0.06f)).padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(4.dp)
+                        ) {
+                            post.comments.forEach { comment ->
+                                Text(
+                                    "AI 伴侣: $comment",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
@@ -214,19 +283,28 @@ fun MomentPostCard(
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
-                                imageVector = if (post.liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                imageVector = if (post.liked) Icons.Filled.Favorite else {
+                                    if (post.aiLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder
+                                },
                                 contentDescription = "赞",
-                                tint = if (post.liked) MaterialTheme.colorScheme.error else WeChatGreen.copy(alpha = 0.5f),
+                                tint = when {
+                                    post.liked -> MaterialTheme.colorScheme.error
+                                    post.aiLiked -> WeChatGreen
+                                    else -> WeChatGreen.copy(alpha = 0.5f)
+                                },
                                 modifier = Modifier.size(18.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(4.dp))
 
                         Text(
-                            text = if (post.liked) (post.likeCount + 1).toString() else post.likeCount.toString(),
+                            text = post.likeCount.toString(),
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (post.liked) MaterialTheme.colorScheme.error
-                                   else MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                            color = when {
+                                post.liked -> MaterialTheme.colorScheme.error
+                                post.aiLiked -> WeChatGreen
+                                else -> MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f)
+                            }
                         )
 
                         Spacer(modifier = Modifier.width(16.dp))

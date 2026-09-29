@@ -305,6 +305,96 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
                 }
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("🧠 记忆管理", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("支持导出/导入 .json 或 .md 格式的记忆备份", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val memoryManager = remember { com.wechat.agent.data.MemoryManager(context.applicationContext) }
+
+                    val exportJsonLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.CreateDocument("application/json")
+                    ) { uri: Uri? ->
+                        uri?.let {
+                            scope.launch {
+                                runCatching {
+                                    context.contentResolver.openOutputStream(it)?.use { out ->
+                                        out.write(memoryManager.exportJson().toByteArray())
+                                    }
+                                }
+                                snackbarHostState.showSnackbar("记忆已导出为 JSON")
+                            }
+                        }
+                    }
+
+                    val exportMdLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.CreateDocument("text/markdown")
+                    ) { uri: Uri? ->
+                        uri?.let {
+                            scope.launch {
+                                runCatching {
+                                    context.contentResolver.openOutputStream(it)?.use { out ->
+                                        out.write(memoryManager.exportMarkdown().toByteArray())
+                                    }
+                                }
+                                snackbarHostState.showSnackbar("记忆已导出为 Markdown")
+                            }
+                        }
+                    }
+
+                    val importLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.GetContent()
+                    ) { uri: Uri? ->
+                        uri?.let {
+                            scope.launch {
+                                val content = runCatching {
+                                    context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() }
+                                }.getOrNull() ?: ""
+                                val ok = when {
+                                    content.isBlank() -> false
+                                    content.trimStart().startsWith("{") -> memoryManager.importJson(content)
+                                    else -> memoryManager.importMarkdown(content)
+                                }
+                                snackbarHostState.showSnackbar(
+                                    if (ok) "记忆导入成功" else "导入失败：无法识别的格式"
+                                )
+                            }
+                        }
+                    }
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { exportJsonLauncher.launch("agent_memory.json") },
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)
+                        ) { Text("导出 .json", fontWeight = FontWeight.Medium) }
+                        Button(
+                            onClick = { exportMdLauncher.launch("agent_memory.md") },
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen.copy(alpha = 0.8f))
+                        ) { Text("导出 .md", fontWeight = FontWeight.Medium) }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { importLauncher.launch("*/*") },
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) { Text("导入记忆（自动识别 json / md）", fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface) }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("导入会覆盖当前记忆，请谨慎操作", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                }
+            }
             Spacer(modifier = Modifier.height(32.dp))
         }
     }

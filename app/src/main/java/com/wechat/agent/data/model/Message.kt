@@ -7,7 +7,8 @@ data class Message(
     val content: String,
     val role: Role,
     val timestamp: Long = System.currentTimeMillis(),
-    var status: MessageStatus = MessageStatus.SENDING
+    var status: MessageStatus = MessageStatus.SENDING,
+    val imageUri: String = ""
 )
 
 enum class Role {

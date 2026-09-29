@@ -19,8 +19,8 @@ class LifeSimulator(private val prefs: SharedPreferences, private val memoryMana
 
         const val WAKE_HOUR = 8
         const val SLEEP_HOUR = 23
-        const val INTERVAL_MINUTES = 20
-        const val EVENTS_PER_HOUR = 3
+        const val INTERVAL_MINUTES = 30
+        const val EVENTS_PER_HOUR = 2
     }
 
     data class SimEvent(

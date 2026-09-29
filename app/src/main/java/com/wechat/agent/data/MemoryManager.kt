@@ -150,6 +150,137 @@ class MemoryManager(context: Context) {
         return try { gson.fromJson(json, EmotionState::class.java) } catch (_: Exception) { EmotionState() }
     }
 
+    // ========== 记忆导入 / 导出 ==========
+
+    data class MemoryBackup(
+        val version: Int = 1,
+        val exportedAt: String = "",
+        val emotion: EmotionState = EmotionState(),
+        val memories: Map<String, List<MemoryEntry>> = emptyMap()
+    )
+
+    suspend fun exportJson(): String = mutex.withLock {
+        val backup = MemoryBackup(
+            version = 1,
+            exportedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
+            emotion = loadEmotion(),
+            memories = mapOf(
+                MemoryType.L0_INSTANT.name to loadMemory(MemoryType.L0_INSTANT),
+                MemoryType.L1_DAILY.name to loadMemory(MemoryType.L1_DAILY),
+                MemoryType.L2_GROWTH.name to loadMemory(MemoryType.L2_GROWTH)
+            )
+        )
+        gson.toJson(backup)
+    }
+
+    suspend fun exportMarkdown(): String = mutex.withLock {
+        val sb = StringBuilder()
+        val emotion = loadEmotion()
+        sb.appendLine("# Agent 记忆备份")
+        sb.appendLine()
+        sb.appendLine("- 导出时间: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
+        sb.appendLine("- 版本: 1")
+        sb.appendLine()
+        sb.appendLine("## 情绪状态")
+        sb.appendLine("- 心情: ${emotion.mood.label}")
+        sb.appendLine("- 好感度: ${emotion.affinity}/100")
+        sb.appendLine("- 今日话题数: ${emotion.todayTopicCount}")
+        sb.appendLine()
+        sb.appendLine("## 即时记忆 (L0)")
+        appendMemorySection(sb, loadMemory(MemoryType.L0_INSTANT))
+        sb.appendLine("## 日常记忆 (L1)")
+        appendMemorySection(sb, loadMemory(MemoryType.L1_DAILY))
+        sb.appendLine("## 长期记忆 (L2)")
+        appendMemorySection(sb, loadMemory(MemoryType.L2_GROWTH))
+        sb.toString()
+    }
+
+    private fun appendMemorySection(sb: StringBuilder, entries: List<MemoryEntry>) {
+        if (entries.isEmpty()) {
+            sb.appendLine("(暂无)")
+            sb.appendLine()
+            return
+        }
+        entries.forEach { entry ->
+            sb.appendLine("- [${entry.importance}] ${entry.emotion} | ${entry.content}")
+        }
+        sb.appendLine()
+    }
+
+    suspend fun importJson(json: String): Boolean = mutex.withLock {
+        try {
+            val backup = gson.fromJson(json, MemoryBackup::class.java)
+            if (backup.memories.isEmpty()) return false
+            backup.memories.forEach { (typeName, entries) ->
+                val type = MemoryType.values().firstOrNull { it.name == typeName } ?: return@forEach
+                saveMemory(type, entries)
+            }
+            if (backup.emotion.affinity != 0 || backup.emotion.mood != Mood.HAPPY) {
+                prefs.edit().putString("emotion_state", gson.toJson(backup.emotion)).apply()
+            }
+            true
+        } catch (_: Exception) { false }
+    }
+
+    suspend fun importMarkdown(md: String): Boolean = mutex.withLock {
+        try {
+            val lines = md.lines()
+            var currentType: MemoryType? = null
+            var emotion: EmotionState? = null
+            val parsed = mutableMapOf<MemoryType, MutableList<MemoryEntry>>()
+            var inEmotion = false
+
+            lines.forEach { raw ->
+                val line = raw.trim()
+                when {
+                    line.startsWith("## 情绪状态") -> { currentType = null; inEmotion = true }
+                    line.startsWith("## ") -> {
+                        currentType = when {
+                            line.contains("L0") -> MemoryType.L0_INSTANT
+                            line.contains("L1") -> MemoryType.L1_DAILY
+                            line.contains("L2") -> MemoryType.L2_GROWTH
+                            else -> null
+                        }
+                        inEmotion = false
+                        if (currentType != null) parsed.getOrPut(currentType!!) { mutableListOf() }
+                    }
+                    line.startsWith("- [") -> {
+                        val type = currentType ?: return@forEach
+                        val importance = line.substringAfter("[").substringBefore("]").toIntOrNull() ?: 2
+                        val content = line.substringAfter("] ")
+                        val emotionPart = content.substringBefore(" | ").trim()
+                        val body = content.substringAfter(" | ", content).trim()
+                        parsed[type]?.add(MemoryEntry(
+                            id = UUID.randomUUID().toString(),
+                            type = type,
+                            content = body,
+                            emotion = emotionPart,
+                            importance = importance
+                        ))
+                    }
+                    line.startsWith("- 心情: ") && inEmotion -> {
+                        val moodLabel = line.removePrefix("- 心情: ").trim()
+                        val mood = Mood.values().firstOrNull { it.label == moodLabel } ?: Mood.HAPPY
+                        emotion = (emotion ?: EmotionState()).copy(mood = mood)
+                    }
+                    line.startsWith("- 好感度: ") && inEmotion -> {
+                        val affinity = line.removePrefix("- 好感度: ").substringBefore("/").trim().toIntOrNull() ?: 0
+                        emotion = (emotion ?: EmotionState()).copy(affinity = affinity)
+                    }
+                    line.startsWith("- 今日话题数: ") && inEmotion -> {
+                        val topic = line.removePrefix("- 今日话题数: ").trim().toIntOrNull() ?: 0
+                        emotion = (emotion ?: EmotionState()).copy(todayTopicCount = topic)
+                    }
+                }
+            }
+
+            if (parsed.isEmpty()) return false
+            parsed.forEach { (type, entries) -> saveMemory(type, entries) }
+            emotion?.let { prefs.edit().putString("emotion_state", gson.toJson(it)).apply() }
+            true
+        } catch (_: Exception) { false }
+    }
+
     private fun loadMemory(type: MemoryType): List<MemoryEntry> {
         val json = prefs.getString("mem_${type.name}", null) ?: return emptyList()
         return try {

@@ -8,7 +8,11 @@ data class MomentPost(
     val likeCount: Int = 0,
     val commentCount: Int = 0,
     val liked: Boolean = false,
-    val timeCategory: TimeCategory = TimeCategory.MORNING
+    val timeCategory: TimeCategory = TimeCategory.MORNING,
+    val author: String = "AI伴侣",
+    val comments: List<String> = emptyList(),
+    val aiLiked: Boolean = false,
+    val aiReacted: Boolean = false
 )
 
 enum class TimeCategory(val label: String, val emoji: String) {

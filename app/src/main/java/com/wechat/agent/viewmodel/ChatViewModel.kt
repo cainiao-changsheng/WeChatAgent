@@ -48,9 +48,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         application.getSharedPreferences("typing_habits", 0)
     )
     private val momentsGenerator = MomentsGenerator(memoryManager)
+    private val decisionEngine = LifeDecisionEngine(memoryManager)
     private val gson = Gson()
     private val chatPrefs: SharedPreferences = application.getSharedPreferences("chat_sessions", 0)
     private val momentsPrefs: SharedPreferences = application.getSharedPreferences("moments", 0)
+    private val statusPrefs: SharedPreferences = application.getSharedPreferences("agent_status", 0)
 
     private val _chats = MutableStateFlow<List<Chat>>(emptyList())
     val chats = _chats.asStateFlow()
@@ -79,14 +81,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _momentsPosts = MutableStateFlow<List<MomentPost>>(emptyList())
     val momentsPosts = _momentsPosts.asStateFlow()
 
+    private val _agentStatus = MutableStateFlow(AgentStatus())
+    val agentStatus = _agentStatus.asStateFlow()
+
     private var streamingJob: Job? = null
     private var deliveryJob: Job? = null
+    private var statusJob: Job? = null
     private var lastUserMessageTime: Long = 0
     private var messageDeliverySequence = 0
 
     init {
         loadChatsFromStorage()
         loadMomentsFromStorage()
+        _agentStatus.value = decisionEngine.loadStatus(statusPrefs)
         viewModelScope.launch {
             _emotionState.value = memoryManager.loadEmotion()
             _moodText.value = emotionEngine.getMoodDescription(
@@ -94,9 +101,113 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
             repository.formatRule = typingTracker.getFormatRule()
             runLifeSimulation()
-            checkAutoMoments()
+            refreshAgentStatus()
+            startStatusLoop()
         }
         try { musicController.connect() } catch (_: Exception) {}
+    }
+
+    /**
+     * 每 30 分钟自动刷新 Agent 生活状态：
+     * 生成"此刻在做什么"、决策是否联系用户 / 是否发动态，并自主执行。
+     */
+    private fun startStatusLoop() {
+        statusJob?.cancel()
+        statusJob = viewModelScope.launch {
+            while (isActive) {
+                delay(LifeSimulator.INTERVAL_MINUTES * 60 * 1000L)
+                runLifeSimulation()
+                refreshAgentStatus()
+            }
+        }
+    }
+
+    private suspend fun refreshAgentStatus() {
+        try {
+            val now = System.currentTimeMillis()
+            val state = _emotionState.value
+            val recentMemories = memoryManager.getL1Memory()
+            val status = decisionEngine.decide(state, now, statusPrefs, recentMemories)
+            _agentStatus.value = status
+            decisionEngine.saveStatus(statusPrefs, status)
+
+            if (status.shouldPostMoment) {
+                statusPrefs.edit().putLong(LifeDecisionEngine.LAST_POST_KEY, now).apply()
+                autoGenerateMomentPost(status.postReason)
+            }
+            if (status.shouldContactUser) {
+                statusPrefs.edit().putLong(LifeDecisionEngine.LAST_CONTACT_KEY, now).apply()
+                sendProactiveContact(status.contactReason)
+            }
+        } catch (_: Exception) {}
+    }
+
+    /** AI 自主发动态：由状态机触发，无需用户手动点击。 */
+    private suspend fun autoGenerateMomentPost(reason: String) {
+        try {
+            val now = System.currentTimeMillis()
+            val lastAutoTime = momentsPrefs.getLong("last_auto_moments", 0)
+            if (now - lastAutoTime < 60 * 60 * 1000L) return
+
+            val state = _emotionState.value
+            val apiKey = settingsManager.apiKey.first()
+            val model = settingsManager.modelName.first()
+            val post = if (apiKey.isNotEmpty()) {
+                val prompt = momentsGenerator.buildGenerationPrompt(
+                    state, memoryManager.getL1Memory(), memoryManager.getL2Memory()
+                )
+                val result = repository.sendMessage(model, apiKey,
+                    listOf(ChatMessage(role = "user", content = prompt)))
+                val content = result.getOrElse { momentsGenerator.generateSimulatedLifeEvents(state) }
+                    .removePrefix("\"").removeSuffix("\"").trim()
+                momentsGenerator.generateMomentPost(state).copy(content = content)
+            } else {
+                momentsGenerator.generateMomentPost(state)
+            }
+
+            val currentPosts = _momentsPosts.value.toMutableList()
+            currentPosts.add(post)
+            if (currentPosts.size > 50) currentPosts.removeAt(0)
+            _momentsPosts.value = currentPosts
+            saveMomentsToStorage()
+            momentsPrefs.edit().putLong("last_auto_moments", now).apply()
+        } catch (_: Exception) {}
+    }
+
+    /** AI 主动联系用户：在聊天中插入一条由 AI 性格驱动的主动消息。 */
+    private fun sendProactiveContact(reason: String) {
+        viewModelScope.launch {
+            try {
+                val chatId = _currentChatId.value ?: createNewChat()
+                val apiKey = settingsManager.apiKey.first()
+                val model = settingsManager.modelName.first()
+                val state = _emotionState.value
+                val content = if (apiKey.isNotEmpty()) {
+                    val prompt = "你现在想主动联系对方。原因: $reason。请像真人发微信一样，用一两句自然的话开启聊天，不要任何符号前缀，不要解释原因本身。直接输出这句话。"
+                    repository.sendMessage(model, apiKey,
+                        listOf(ChatMessage(role = "user", content = prompt)))
+                        .getOrElse { "刚想到你啦，在干嘛呢？" }
+                        .removePrefix("\"").removeSuffix("\"").trim()
+                } else {
+                    when (state.mood) {
+                        Mood.CARING -> "刚想到你啦，记得按时吃饭哦"
+                        Mood.SHY -> "那个…在忙吗？突然想找你说说话"
+                        Mood.HAPPY -> "今天心情超好！第一个就想分享给你"
+                        else -> "刚想到你啦，在干嘛呢？"
+                    }
+                }.take(100)
+
+                val agentMsg = Message(content = content, role = Role.AGENT, status = MessageStatus.SENT)
+                _currentMessages.value = _currentMessages.value + agentMsg
+                syncChatInList(chatId, content, _currentMessages.value)
+
+                memoryManager.addMemory(MemoryEntry(
+                    id = UUID.randomUUID().toString(), type = MemoryType.L0_INSTANT,
+                    content = "主动联系对方: $reason → 我说: $content",
+                    emotion = state.mood.label, importance = 3
+                ))
+            } catch (_: Exception) {}
+        }
     }
 
     private suspend fun runLifeSimulation() {
@@ -394,6 +505,101 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         saveMomentsToStorage()
     }
 
+    /** 用户发布朋友圈动态，并触发 AI 自主互动（根据条件判断是否点赞/评论）。 */
+    fun postUserMoment(content: String) {
+        val trimmed = content.trim()
+        if (trimmed.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val post = MomentPost(
+            id = UUID.randomUUID().toString(),
+            content = trimmed,
+            mood = "",
+            timestamp = now,
+            likeCount = 0,
+            commentCount = 0,
+            liked = false,
+            author = "我",
+            aiReacted = false
+        )
+        _momentsPosts.value = _momentsPosts.value + post
+        saveMomentsToStorage()
+        reactToPost(post.id)
+    }
+
+    /** AI 对用户动态互动：按好感度 / 心情 / 概率决定是否点赞、是否评论。 */
+    private fun reactToPost(postId: String) {
+        viewModelScope.launch {
+            try {
+                val post = _momentsPosts.value.find { it.id == postId } ?: return@launch
+                if (post.aiReacted) return@launch
+                val state = _emotionState.value
+                val rand = Random.nextInt(100)
+
+                var aiLiked = false
+                var comment: String? = null
+                when {
+                    state.affinity >= 70 -> {
+                        aiLiked = true
+                        if (rand < 75) comment = generateReactionComment(state, post)
+                    }
+                    state.affinity >= 45 -> {
+                        if (rand < 55) aiLiked = true
+                        if (rand < 40) comment = generateReactionComment(state, post)
+                    }
+                    state.affinity >= 25 -> {
+                        if (rand < 30) aiLiked = true
+                    }
+                    else -> {
+                        if (rand < 10) comment = "（已读）"
+                    }
+                }
+
+                val finalComment = comment ?: ""
+                val updated = post.copy(
+                    likeCount = post.likeCount + (if (aiLiked) 1 else 0),
+                    commentCount = post.commentCount + (if (finalComment.isNotEmpty()) 1 else 0),
+                    comments = if (finalComment.isNotEmpty()) post.comments + finalComment else post.comments,
+                    aiLiked = aiLiked,
+                    aiReacted = true
+                )
+                _momentsPosts.value = _momentsPosts.value.map { if (it.id == postId) updated else it }
+                saveMomentsToStorage()
+            } catch (_: Exception) {}
+        }
+    }
+
+    private suspend fun generateReactionComment(state: EmotionState, post: MomentPost): String {
+        return try {
+            val apiKey = settingsManager.apiKey.first()
+            val model = settingsManager.modelName.first()
+            if (apiKey.isNotEmpty()) {
+                val prompt = "你正在看对方发的朋友圈。对方动态内容: \"${post.content.take(80)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
+                    "请以AI伴侣的身份，回一条简短自然的评论（15字以内），像真人发朋友圈评论一样，不要引号和任何符号前缀。直接输出。"
+                repository.sendMessage(model, apiKey,
+                    listOf(ChatMessage(role = "user", content = prompt)))
+                    .getOrElse { localReactionComment(state) }
+                    .removePrefix("\"").removeSuffix("\"").trim().take(30)
+            } else {
+                localReactionComment(state)
+            }
+        } catch (_: Exception) {
+            localReactionComment(state)
+        }
+    }
+
+    private fun localReactionComment(state: EmotionState): String {
+        val pool = when (state.mood) {
+            Mood.HAPPY -> listOf("看到你的动态心情都变好了！", "好棒！给你点个赞", "哈哈这个太可爱了")
+            Mood.CARING -> listOf("记得照顾好自己呀", "看到你过得不错我就放心了", "有空多聊聊呀")
+            Mood.PLAYFUL -> listOf("哟，不错嘛", "嘿嘿我也来凑个热闹", "这个动态我超喜欢")
+            Mood.SHY -> listOf("悄悄路过…", "写得真好（小声）", "那个…说得很对")
+            Mood.WRONGED -> listOf("哼，都不陪我玩", "某人发动态也不找我…")
+            Mood.LAZY -> listOf("羡慕，我也想这么惬意", "好懒好羡慕")
+            else -> listOf("收到你的动态啦", "看完了，挺好的", "在呢，看到啦")
+        }
+        return pool.random()
+    }
+
     fun generateMomentsPost() {
         viewModelScope.launch {
             try {
@@ -454,8 +660,84 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         saveChatsToStorage()
     }
 
+    fun sendImageMessage(uri: String) {
+        val now = System.currentTimeMillis()
+        val chatId = _currentChatId.value ?: createNewChat()
+        val userMessage = Message(content = "[图片]", role = Role.USER, imageUri = uri)
+        val updatedMessages = _currentMessages.value + userMessage
+        _currentMessages.value = updatedMessages
+        syncChatInList(chatId, "[图片]", updatedMessages)
+
+        streamingJob?.cancel()
+        streamingJob = viewModelScope.launch {
+            _isLoading.value = true
+            _streamingContent.value = ""
+            try {
+                val apiKey = getApiKey()
+                val model = getModelName()
+                val state = _emotionState.value
+                val userEmotion = "warm"
+                val newState = emotionEngine.updateAffinity(state, userEmotion)
+                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                val newMood = emotionEngine.deriveMood(newState, userEmotion, hour)
+                val finalState = newState.copy(
+                    mood = newMood, lastInteraction = now,
+                    todayTopicCount = state.todayTopicCount + 1
+                )
+                _emotionState.value = finalState
+                _moodText.value = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
+                memoryManager.saveEmotion(finalState)
+
+                val emotionDesc = "好感度${finalState.affinity}/100·${finalState.mood.label}"
+                val moodDesc = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
+                val chatMessages = repository.buildChatMessages(model, updatedMessages, emotionDesc, moodDesc)
+
+                var fullReply = ""
+                repository.sendMessageStream(model, apiKey, chatMessages)
+                    .collect { chunk ->
+                        fullReply += chunk
+                        _streamingContent.value = fullReply
+                    }
+
+                if (fullReply.isNotEmpty()) {
+                    val cleaned = fullReply
+                        .replace(Regex("""\*[^*]+\*"""), "")
+                        .replace(Regex("""【[^】]+】"""), "")
+                        .replace(Regex("""（[^）]+）"""), "")
+                        .replace(Regex("""\([^)]+\)"""), "")
+                        .trim()
+
+                    _streamingContent.value = ""
+                    deliverMultiMessage(cleaned, chatId)
+
+                    memoryManager.addMemory(MemoryEntry(
+                        id = UUID.randomUUID().toString(), type = MemoryType.L0_INSTANT,
+                        content = "对方发来一张图片 → 你回复: ${fullReply.take(80)}",
+                        emotion = userEmotion, importance = 2
+                    ))
+                    if (finalState.affinity > 60) {
+                        memoryManager.addGrowthMemory(
+                            "对方分享了图片给你", userEmotion, importance = 3
+                        )
+                    }
+                } else {
+                    _isLoading.value = false
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                _isLoading.value = false; throw e
+            } catch (e: Exception) {
+                val errorMsg = Message(
+                    content = "图片收到啦！不过网络好像不太对劲，等会儿再聊？",
+                    role = Role.AGENT, status = MessageStatus.ERROR
+                )
+                finishStreaming(errorMsg.content, chatId, errorMsg.status)
+            }
+        }
+    }
+
     override fun onCleared() {
         super.onCleared()
+        statusJob?.cancel()
         saveChatsToStorage()
         saveMomentsToStorage()
         musicController.release()
