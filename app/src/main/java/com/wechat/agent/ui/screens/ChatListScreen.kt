@@ -3,6 +3,7 @@ package com.wechat.agent.ui.screens
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -62,44 +63,80 @@ fun ChatListScreen(
     bottomBar: @Composable () -> Unit = {}
 ) {
     var showDeleteDialog by remember { mutableStateOf<String?>(null) }
+    var searching by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
     val context = LocalContext.current
+
+    val filteredChats = remember(chats, searchQuery) {
+        if (searchQuery.isBlank()) chats
+        else chats.filter {
+            it.title.contains(searchQuery, ignoreCase = true) ||
+                it.lastMessage.contains(searchQuery, ignoreCase = true)
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("聊天", fontWeight = FontWeight.Medium)
+                    if (searching) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("搜索聊天记录") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("聊天", fontWeight = FontWeight.Medium)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface),
                 actions = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Default.Search, contentDescription = "搜索", tint = WeChatGreen)
-                    }
-                    IconButton(onClick = onNewChat) {
-                        Icon(Icons.Default.Add, contentDescription = "新建对话", tint = WeChatGreen)
+                    Row(
+                        modifier = Modifier.padding(end = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy((-8).dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = {
+                            searching = !searching
+                            if (!searching) searchQuery = ""
+                        }) {
+                            Icon(
+                                if (searching) Icons.Default.Close else Icons.Default.Search,
+                                contentDescription = if (searching) "取消搜索" else "搜索",
+                                tint = WeChatGreen,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        IconButton(onClick = onNewChat) {
+                            Icon(Icons.Default.Add, contentDescription = "新建对话", tint = WeChatGreen,
+                                modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
             )
         },
         bottomBar = { bottomBar() }
     ) { padding ->
-        if (chats.isEmpty()) {
+        val displayList = filteredChats
+        if (displayList.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("💬", fontSize = MaterialTheme.typography.headlineLarge.fontSize)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("暂无对话", style = MaterialTheme.typography.bodyLarge,
+                    Text(if (searching) "未找到相关聊天记录" else "暂无对话", style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f))
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("点击右上角 + 开始新对话", style = MaterialTheme.typography.bodyMedium,
+                    Text(if (searching) "换个关键词试试" else "点击右上角 + 开始新对话", style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.3f))
                 }
             }
         } else {
             LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                items(chats, key = { it.id }) { chat ->
+                items(displayList, key = { it.id }) { chat ->
                     ChatListItem(chat = chat, agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
                         onClick = { onChatClick(chat.id) }, onLongClick = { showDeleteDialog = chat.id })
                 }

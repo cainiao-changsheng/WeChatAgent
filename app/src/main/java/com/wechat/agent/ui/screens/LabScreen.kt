@@ -1,6 +1,5 @@
 package com.wechat.agent.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,10 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Science
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -34,44 +33,36 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.wechat.agent.ui.theme.WeChatGreen
 
 /**
- * 设置菜单页：提供「模型配置」「检查更新」「更新日志」跳转入口。
+ * 实验室页：所有处于测试阶段的新功能统一入口。
+ * 功能稳定后由产品决定是否移至正式菜单，本页仅做说明与快捷跳转。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(
+fun LabScreen(
     onBack: () -> Unit = {},
-    showBack: Boolean = true,
-    onOpenModelConfig: () -> Unit = {},
-    onOpenUpdateCheck: () -> Unit = {},
-    onOpenChangelog: () -> Unit = {},
-    onOpenLab: () -> Unit = {},
-    bottomBar: @Composable () -> Unit = {}
+    onOpenModelConfig: () -> Unit = {}
 ) {
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("设置", fontWeight = FontWeight.Medium)
+                        Text("实验室", fontWeight = FontWeight.Medium)
                     }
                 },
                 navigationIcon = {
-                    if (showBack) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                        }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
-        },
-        bottomBar = { bottomBar() }
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -79,54 +70,54 @@ fun SettingsScreen(
                 .padding(padding)
                 .padding(16.dp)
         ) {
+            Text(
+                "实验功能 · 稳定后自动移至正式位置",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(Modifier.padding(vertical = 4.dp)) {
-                    SettingsMenuItem(
-                        icon = { Icon(Icons.Default.Settings, contentDescription = null, tint = WeChatGreen) },
-                        title = "模型配置",
-                        subtitle = "API 地址、密钥、模型名称",
+                    LabItem(
+                        icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = WeChatGreen) },
+                        title = "动态删除",
+                        subtitle = "朋友圈右上角垃圾桶可删除自己发布的动态",
+                        status = "内测中",
+                        onClick = {}
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
+                    LabItem(
+                        icon = { Icon(Icons.Default.WifiTethering, contentDescription = null, tint = WeChatGreen) },
+                        title = "模型连接测试",
+                        subtitle = "模型配置内一键发送测试消息验证连通性",
+                        status = "内测中",
                         onClick = onOpenModelConfig
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                     )
-                    SettingsMenuItem(
-                        icon = { Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = WeChatGreen) },
-                        title = "检查更新",
-                        subtitle = "在线检查并安装新版本",
-                        onClick = onOpenUpdateCheck
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                    )
-                    SettingsMenuItem(
-                        icon = { Icon(Icons.Default.History, contentDescription = null, tint = WeChatGreen) },
-                        title = "更新日志",
-                        subtitle = "查看历史版本更新内容",
-                        onClick = onOpenChangelog
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-                    )
-                    SettingsMenuItem(
-                        icon = { Icon(Icons.Default.Science, contentDescription = null, tint = WeChatGreen) },
-                        title = "实验室",
-                        subtitle = "新功能尝鲜入口，稳定后移至正式位置",
-                        onClick = onOpenLab
+                    LabItem(
+                        icon = { Icon(Icons.Default.Search, contentDescription = null, tint = WeChatGreen) },
+                        title = "聊天记录搜索",
+                        subtitle = "聊天页 🔍 支持按标题与消息内容搜索",
+                        status = "内测中",
+                        onClick = {}
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
             Text(
-                "设置项已拆分：模型配置用于接入 AI 接口，检查更新用于在线升级 App，更新日志展示历史版本记录；实验室集中收纳测试中的新功能",
+                "后续新功能默认先进实验室，确认稳定后再移动到合适的位置。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
@@ -135,10 +126,11 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsMenuItem(
+private fun LabItem(
     icon: @Composable () -> Unit,
     title: String,
     subtitle: String,
+    status: String,
     onClick: () -> Unit
 ) {
     Row(
@@ -151,19 +143,19 @@ private fun SettingsMenuItem(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(WeChatGreen.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
+                .padding(8.dp)
         ) {
             icon()
         }
-        Spacer(modifier = Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
             Spacer(modifier = Modifier.height(2.dp))
             Text(subtitle, style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
         }
+        Text(status, style = MaterialTheme.typography.labelSmall,
+            color = WeChatGreen, modifier = Modifier.padding(end = 4.dp))
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
     }

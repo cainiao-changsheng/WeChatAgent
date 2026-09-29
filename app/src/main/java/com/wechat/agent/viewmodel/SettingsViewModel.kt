@@ -84,6 +84,40 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    companion object {
+        const val TEST_MESSAGE = "测试消息，请回复当前时间和你的模型信息，其余内容无需回复。"
+    }
+
+    /** 向配置的模型发送一条测试消息，返回模型回复文本；失败返回空串。 */
+    fun testModelConnection(
+        url: String,
+        key: String,
+        model: String,
+        onResult: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val reply = runCatching {
+                RetrofitClient.updateBaseUrl(url)
+                val request = ChatRequest(
+                    model = model,
+                    messages = listOf(ChatMessage(role = "user", content = TEST_MESSAGE)),
+                    stream = false
+                )
+                val resp = RetrofitClient.getApiService().sendMessage(
+                    authorization = "Bearer $key",
+                    request = request
+                )
+                if (resp.isSuccessful) {
+                    val content = resp.body()?.choices?.firstOrNull()?.message?.content.orEmpty().trim()
+                    content.ifBlank { "（模型返回了空内容）" }
+                } else {
+                    ""
+                }
+            }.getOrDefault("")
+            onResult(reply)
+        }
+    }
+
     fun saveUserNickname(nickname: String) {
         viewModelScope.launch {
             settingsManager.saveUserNickname(nickname)

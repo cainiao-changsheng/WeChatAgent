@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -27,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -63,6 +65,8 @@ fun ModelConfigScreen(
     var urlInput by remember(apiUrl) { mutableStateOf(apiUrl) }
     var keyInput by remember(apiKey) { mutableStateOf(apiKey) }
     var modelInput by remember(modelName) { mutableStateOf(modelName) }
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf<String?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -126,6 +130,27 @@ fun ModelConfigScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)) {
                         Text("保存配置", fontWeight = FontWeight.Medium)
                     }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedButton(
+                        onClick = {
+                            testing = true
+                            viewModel.testModelConnection(urlInput, keyInput, modelInput) { result ->
+                                testing = false
+                                testResult = result
+                            }
+                        },
+                        enabled = !testing,
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        if (testing) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("测试中…")
+                        } else {
+                            Text("测试链接", fontWeight = FontWeight.Medium)
+                        }
+                    }
                 }
             }
 
@@ -146,5 +171,24 @@ fun ModelConfigScreen(
             }
             Spacer(modifier = Modifier.height(32.dp))
         }
+    }
+
+    testResult?.let { reply ->
+        AlertDialog(
+            onDismissRequest = { testResult = null },
+            title = { Text("模型测试结果") },
+            text = {
+                Text(
+                    if (reply.isNotBlank()) reply
+                    else "模型配置失败，请检查配置或网络",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { testResult = null }) {
+                    Text("确认", fontWeight = FontWeight.Medium)
+                }
+            }
+        )
     }
 }

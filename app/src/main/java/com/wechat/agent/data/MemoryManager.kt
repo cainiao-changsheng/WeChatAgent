@@ -139,13 +139,13 @@ class MemoryManager(context: Context) {
 
     suspend fun buildMemoryContext(maxTokens: Int = 2000): String = mutex.withLock {
         val sb = StringBuilder()
-        val l2 = loadMemory(MemoryType.L2_GROWTH).filter { it.importance >= 3 }.take(8)
+        val l2 = loadMemory(MemoryType.L2_GROWTH).filter { it.importance >= 2 }.take(8)
         if (l2.isNotEmpty()) {
             sb.appendLine("【你和对方的长期记忆】")
             l2.forEach { sb.appendLine("- ${it.content}") }
             sb.appendLine()
         }
-        val l1 = loadMemory(MemoryType.L1_DAILY).take(3)
+        val l1 = loadMemory(MemoryType.L1_DAILY).take(8)
         if (l1.isNotEmpty()) {
             sb.appendLine("【今天发生的事】")
             l1.forEach { sb.appendLine("- ${it.content}") }
@@ -311,7 +311,7 @@ class MemoryManager(context: Context) {
                     }
                     line.startsWith("- [") -> {
                         val type = currentType ?: return@forEach
-                        val importance = line.substringAfter("[").substringBefore("]").toIntOrNull() ?: 2
+                        val importance = line.substringAfter("[").substringBefore("]").toIntOrNull() ?: 3
                         val content = line.substringAfter("] ")
                         val emotionPart = content.substringBefore(" | ").trim()
                         val body = content.substringAfter(" | ", content).trim()
@@ -322,6 +322,18 @@ class MemoryManager(context: Context) {
                             emotion = emotionPart,
                             importance = importance
                         ))
+                    }
+                    // 兜底：普通纯文本行（无分区、无 - [x] 前缀）一律视为 L1 日常记忆，
+                    // 保证任意格式的 .md / .txt 导入后都会被模型读到
+                    line.isNotBlank() && !line.startsWith("#") && currentType == null && !inEmotion -> {
+                        val entry = MemoryEntry(
+                            id = UUID.randomUUID().toString(),
+                            type = MemoryType.L1_DAILY,
+                            content = line,
+                            emotion = "",
+                            importance = 5
+                        )
+                        parsed.getOrPut(MemoryType.L1_DAILY) { mutableListOf() }.add(entry)
                     }
                     line.startsWith("- 心情: ") && inEmotion -> {
                         val moodLabel = line.removePrefix("- 心情: ").trim()

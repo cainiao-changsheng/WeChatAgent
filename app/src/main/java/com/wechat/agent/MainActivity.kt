@@ -78,15 +78,6 @@ fun AppNavigation() {
         chatViewModel.switchAgent(currentAgentId)
     }
 
-    fun openChatWithAgent() {
-        if (chats.isNotEmpty()) {
-            chatViewModel.selectChat(chats.first().id)
-            navController.navigate("chat/${chats.first().id}")
-        } else {
-            navController.navigate("chat/${chatViewModel.createNewChat()}")
-        }
-    }
-
     NavHost(navController = navController, startDestination = "chatList") {
         composable("chatList") {
             ChatListScreen(
@@ -193,15 +184,19 @@ fun AppNavigation() {
                 },
                 onBack = { navController.popBackStack() },
                 onEdit = { navController.navigate("agentSetupEdit") },
-                onSendMessage = { openChatWithAgent() }
+                onSendMessage = {
+                    val chatId = chatViewModel.openOrCreateChatWithAgent(profile.id)
+                    navController.navigate("chat/$chatId")
+                }
             )
         }
 
         composable("chat/{chatId}") { backStackEntry ->
             val id = backStackEntry.arguments?.getString("chatId") ?: return@composable
             val chat = chats.find { it.id == id }
+            val chatAgent = chat?.agentId?.let { aid -> agentProfiles.find { it.id == aid } }
             ChatScreen(
-                chatTitle = chat?.title ?: "对话", messages = currentMessages,
+                chatTitle = chatAgent?.name ?: chat?.title ?: "对话", messages = currentMessages,
                 streamingContent = streamingContent, isLoading = isLoading,
                 agentAvatar = agentAvatar, userAvatar = userAvatar,
                 agentAvatarUri = agentAvatarUri, userAvatarUri = userAvatarUri,
@@ -217,6 +212,10 @@ fun AppNavigation() {
                 onSkipNext = { chatViewModel.skipNextMusic() },
                 onSkipPrev = { chatViewModel.skipPrevMusic() },
                 onOpenMusicApp = { chatViewModel.openMusicApp() },
+                onAvatarClick = {
+                    val aid = chat?.agentId
+                    if (!aid.isNullOrBlank()) navController.navigate("agentDetail/$aid")
+                },
                 onTypingChange = { chatViewModel.setUserTyping(it) }
             )
         }
@@ -232,6 +231,7 @@ fun AppNavigation() {
                 onComposeMoment = { navController.navigate("composeMoment") },
                 onToggleLike = { chatViewModel.toggleLike(it) },
                 onAddComment = { postId, comment -> chatViewModel.addComment(postId, comment) },
+                onDeletePost = { chatViewModel.deleteMomentPost(it) },
                 bottomBar = {
                     WeChatBottomBar(
                         currentRoute = currentRoute,
@@ -275,7 +275,15 @@ fun AppNavigation() {
                 onBack = { navController.popBackStack() },
                 onOpenModelConfig = { navController.navigate("modelConfig") },
                 onOpenUpdateCheck = { navController.navigate("updateCheck") },
-                onOpenChangelog = { navController.navigate("changelog") }
+                onOpenChangelog = { navController.navigate("changelog") },
+                onOpenLab = { navController.navigate("lab") }
+            )
+        }
+
+        composable("lab") {
+            LabScreen(
+                onBack = { navController.popBackStack() },
+                onOpenModelConfig = { navController.navigate("modelConfig") }
             )
         }
 

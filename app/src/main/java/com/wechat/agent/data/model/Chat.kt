@@ -4,6 +4,7 @@ import java.util.UUID
 
 data class Chat(
     val id: String = UUID.randomUUID().toString(),
+    val agentId: String = "",
     val title: String = "新对话",
     val messages: List<Message> = emptyList(),
     val lastMessage: String = "",

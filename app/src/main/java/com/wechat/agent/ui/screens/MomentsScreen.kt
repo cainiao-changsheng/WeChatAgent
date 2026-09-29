@@ -25,8 +25,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,6 +39,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -76,11 +79,14 @@ fun MomentsScreen(
     onComposeMoment: () -> Unit,
     onToggleLike: (String) -> Unit,
     onAddComment: (String, String) -> Unit,
+    onDeletePost: (String) -> Unit = {},
     bottomBar: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val monthDayFormat = remember { SimpleDateFormat("MM月dd日", Locale.getDefault()) }
+    var deleteMode by remember { mutableStateOf(false) }
+    var pendingDelete by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -98,6 +104,13 @@ fun MomentsScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { deleteMode = !deleteMode }) {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = "删除动态",
+                            tint = if (deleteMode) MaterialTheme.colorScheme.error else WeChatGreen
+                        )
+                    }
                     IconButton(onClick = onComposeMoment) {
                         Icon(
                             Icons.Default.PhotoCamera,
@@ -138,13 +151,37 @@ fun MomentsScreen(
                             onToggleLike = onToggleLike,
                             onAddComment = onAddComment,
                             timeFormat = timeFormat,
-                            monthDayFormat = monthDayFormat
+                            monthDayFormat = monthDayFormat,
+                            showDelete = deleteMode,
+                            onDeleteClick = { pendingDelete = post.id }
                         )
                     }
                     item { Spacer(modifier = Modifier.height(16.dp)) }
                 }
             }
         }
+    }
+
+    if (deleteMode && posts.none { it.author == "我" }) {
+        deleteMode = false
+    }
+
+    pendingDelete?.let { postId ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("删除动态") },
+            text = { Text("是否删除该动态？删除后不可恢复。") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    onDeletePost(postId)
+                    pendingDelete = null
+                    deleteMode = false
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+            }
+        )
     }
 }
 
@@ -159,7 +196,9 @@ fun MomentPostCard(
     onToggleLike: (String) -> Unit,
     onAddComment: (String, String) -> Unit,
     timeFormat: SimpleDateFormat,
-    monthDayFormat: SimpleDateFormat
+    monthDayFormat: SimpleDateFormat,
+    showDelete: Boolean = false,
+    onDeleteClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val now = System.currentTimeMillis()
@@ -213,6 +252,20 @@ fun MomentPostCard(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(timeDisplay, style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
+                        if (showDelete && isUserPost) {
+                            Spacer(modifier = Modifier.weight(1f))
+                            IconButton(
+                                onClick = onDeleteClick,
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "删除该动态",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))

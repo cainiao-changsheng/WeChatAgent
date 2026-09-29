@@ -383,7 +383,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun selectChat(chatId: String) {
         _currentChatId.value = chatId
         val chat = _chats.value.find { it.id == chatId }
+        chat?.agentId?.takeIf { it.isNotBlank() }?.let { memoryManager.setActiveAgent(it) }
         _currentMessages.value = chat?.messages ?: emptyList()
+    }
+
+    /**
+     * 从好友详情页发起聊天：为该好友打开/创建专属会话（按 agentId 绑定），
+     * 避免误用列表第一条旧会话导致新好友消息预览丢失。
+     */
+    fun openOrCreateChatWithAgent(agentId: String): String {
+        val existing = _chats.value.find { it.agentId == agentId }
+        if (existing != null) {
+            _currentChatId.value = existing.id
+            _currentMessages.value = existing.messages
+            return existing.id
+        }
+        val chat = Chat(agentId = agentId, title = "新对话")
+        _chats.value = listOf(chat) + _chats.value
+        _currentChatId.value = chat.id
+        _currentMessages.value = emptyList()
+        memoryManager.setActiveAgent(agentId)
+        saveChatsToStorage()
+        return chat.id
     }
 
     fun sendMessage(content: String) {
@@ -394,6 +415,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         repository.formatRule = typingTracker.getFormatRule()
 
         val chatId = _currentChatId.value ?: createNewChat()
+        _chats.value.find { it.id == chatId }?.agentId?.takeIf { it.isNotBlank() }
+            ?.let { memoryManager.setActiveAgent(it) }
         val userMessage = Message(content = content, role = Role.USER)
         val updatedMessages = _currentMessages.value + userMessage
         _currentMessages.value = updatedMessages
@@ -584,6 +607,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _momentsPosts.value = _momentsPosts.value.map {
             if (it.id == postId) it.copy(liked = !it.liked) else it
         }
+        saveMomentsToStorage()
+    }
+
+    /** 删除用户发布的动态（仅删除“我”发布的动态），删除后持久化。 */
+    fun deleteMomentPost(postId: String) {
+        _momentsPosts.value = _momentsPosts.value.filterNot { it.id == postId }
         saveMomentsToStorage()
     }
 
@@ -891,6 +920,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendImageMessage(uri: String) {
         val now = System.currentTimeMillis()
         val chatId = _currentChatId.value ?: createNewChat()
+        _chats.value.find { it.id == chatId }?.agentId?.takeIf { it.isNotBlank() }
+            ?.let { memoryManager.setActiveAgent(it) }
         val userMessage = Message(content = "[图片]", role = Role.USER, imageUri = uri)
         val updatedMessages = _currentMessages.value + userMessage
         _currentMessages.value = updatedMessages

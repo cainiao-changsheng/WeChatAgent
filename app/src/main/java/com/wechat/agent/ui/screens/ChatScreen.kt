@@ -110,6 +110,7 @@ fun ChatScreen(
     onSkipNext: () -> Unit = {},
     onSkipPrev: () -> Unit = {},
     onOpenMusicApp: () -> Unit = {},
+    onAvatarClick: () -> Unit = {},
     onTypingChange: (Boolean) -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
@@ -141,11 +142,35 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(chatTitle, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (moodText.isNotEmpty()) {
-                            Text(moodText, style = MaterialTheme.typography.labelSmall,
-                                color = WeChatGreen.copy(alpha = 0.8f), maxLines = 1)
+                    Row(
+                        modifier = Modifier.clickable(onClick = onAvatarClick),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(WeChatGreen),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (agentAvatarUri.isNotEmpty()) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context).data(Uri.parse(agentAvatarUri)).crossfade(true).build(),
+                                    contentDescription = "好友头像",
+                                    modifier = Modifier.fillMaxSize().clip(CircleShape),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Text(agentAvatar, fontSize = MaterialTheme.typography.titleMedium.fontSize)
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(chatTitle, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (moodText.isNotEmpty()) {
+                                Text(moodText, style = MaterialTheme.typography.labelSmall,
+                                    color = WeChatGreen.copy(alpha = 0.8f), maxLines = 1)
+                            }
                         }
                     }
                 },

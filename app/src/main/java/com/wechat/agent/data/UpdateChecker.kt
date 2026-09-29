@@ -24,43 +24,75 @@ data class UpdateInfo(
 object UpdateChecker {
 
     private const val REPO = "cainiao-changsheng/WeChatAgent"
-    private val client = OkHttpClient.Builder().build()
+    private const val BRANCH = "master"
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
 
-    /** 查询最新 Release 并和当前版本比较；网络/解析失败返回 null。 */
+    /** 查询最新版本并和当前版本比较；网络/解析失败返回 null。 */
     suspend fun checkLatest(currentVersion: String): UpdateInfo? = withContext(Dispatchers.IO) {
         runCatching {
-            val req = Request.Builder()
-                .url("https://api.github.com/repos/$REPO/releases/latest")
-                .header("Accept", "application/vnd.github+json")
-                .header("User-Agent", "WeChatAgent")
-                .build()
-            client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext null
-                val body = resp.body?.string() ?: return@withContext null
-                val json = JSONObject(body)
-                val tag = json.optString("tag_name", "").removePrefix("v")
-                val notes = json.optString("body", "").take(300)
-                var downloadUrl = ""
-                val assets = json.optJSONArray("assets")
-                if (assets != null) {
-                    for (i in 0 until assets.length()) {
-                        val a = assets.optJSONObject(i)
-                        val name = a?.optString("name", "") ?: ""
-                        if (name.endsWith(".apk")) {
-                            downloadUrl = a.optString("browser_download_url", "")
-                            break
-                        }
-                    }
-                }
-                UpdateInfo(
-                    latestVersion = tag,
-                    downloadUrl = downloadUrl,
-                    releaseNotes = notes,
-                    hasUpdate = tag.isNotBlank() && versionCompare(tag, currentVersion) > 0
-                )
-            }
+            fetchReleaseFromApi() ?: fetchUpdateInfoFromRaw()
         }.getOrNull()
     }
+
+    /** 主源：GitHub Releases API。 */
+    private suspend fun fetchReleaseFromApi(): UpdateInfo? = runCatching {
+        val req = Request.Builder()
+            .url("https://api.github.com/repos/$REPO/releases/latest")
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "WeChatAgent")
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) return@runCatching null
+            val body = resp.body?.string() ?: return@runCatching null
+            val json = JSONObject(body)
+            val tag = json.optString("tag_name", "").removePrefix("v")
+            val notes = json.optString("body", "").take(300)
+            var downloadUrl = ""
+            val assets = json.optJSONArray("assets")
+            if (assets != null) {
+                for (i in 0 until assets.length()) {
+                    val a = assets.optJSONObject(i)
+                    val name = a?.optString("name", "") ?: ""
+                    if (name.endsWith(".apk")) {
+                        downloadUrl = a.optString("browser_download_url", "")
+                        break
+                    }
+                }
+            }
+            UpdateInfo(
+                latestVersion = tag,
+                downloadUrl = downloadUrl,
+                releaseNotes = notes,
+                hasUpdate = tag.isNotBlank() && versionCompare(tag, currentVersion) > 0
+            )
+        }
+    }.getOrNull()
+
+    /** 备用源：仓库内 update_info.json（raw 域名通常比 api.github.com 更易访问）。 */
+    private suspend fun fetchUpdateInfoFromRaw(): UpdateInfo? = runCatching {
+        val req = Request.Builder()
+            .url("https://raw.githubusercontent.com/$REPO/$BRANCH/update_info.json")
+            .header("User-Agent", "WeChatAgent")
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) return@runCatching null
+            val body = resp.body?.string() ?: return@runCatching null
+            val json = JSONObject(body)
+            val tag = json.optString("version", "").removePrefix("v")
+            val downloadUrl = json.optString("download_url", "")
+            val notes = json.optString("notes", "").take(300)
+            if (tag.isBlank()) return@runCatching null
+            UpdateInfo(
+                latestVersion = tag,
+                downloadUrl = downloadUrl,
+                releaseNotes = notes,
+                hasUpdate = versionCompare(tag, currentVersion) > 0
+            )
+        }
+    }.getOrNull()
 
     /** 下载 APK 到 cacheDir/apk 目录；失败返回 null。 */
     suspend fun downloadApk(context: Context, url: String): File? = withContext(Dispatchers.IO) {
