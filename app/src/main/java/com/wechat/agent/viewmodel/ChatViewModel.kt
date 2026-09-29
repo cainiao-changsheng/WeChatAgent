@@ -8,6 +8,7 @@ import com.wechat.agent.data.EmotionEngine
 import com.wechat.agent.data.LifeSimulator
 import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.data.MomentsGenerator
+import com.wechat.agent.data.LifeDecisionEngine
 import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.TypingHabitTracker
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 import java.util.Calendar
 import java.util.UUID
 
