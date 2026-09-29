@@ -181,6 +181,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun sendProactiveContact(reason: String) {
         viewModelScope.launch {
             try {
+                // 用户正在输入时不主动插话，等用户发送后再由常规回复流程响应
+                if (_userTyping.value) return@launch
                 val chatId = _currentChatId.value ?: createNewChat()
                 val apiKey = settingsManager.apiKey.first()
                 val model = settingsManager.modelName.first()

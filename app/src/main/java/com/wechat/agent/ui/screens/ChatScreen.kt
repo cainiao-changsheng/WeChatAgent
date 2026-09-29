@@ -109,7 +109,8 @@ fun ChatScreen(
     onPauseMusic: () -> Unit = {},
     onSkipNext: () -> Unit = {},
     onSkipPrev: () -> Unit = {},
-    onOpenMusicApp: () -> Unit = {}
+    onOpenMusicApp: () -> Unit = {},
+    onTypingChange: (Boolean) -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
     var showEmojiPanel by remember { mutableStateOf(false) }

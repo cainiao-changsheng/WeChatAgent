@@ -1,7 +1,10 @@
 package com.wechat.agent.ui.screens
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,10 +32,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.wechat.agent.ui.theme.WeChatGreen
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,6 +66,7 @@ fun AgentDetailScreen(
     onEdit: () -> Unit,
     onSendMessage: () -> Unit
 ) {
+    val snackbarHostState = remember { SnackbarHostState() }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -93,9 +102,11 @@ fun AgentDetailScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)
                 ) { Text("发消息", fontWeight = FontWeight.Medium) }
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         val context = LocalContext.current
+        val scope = rememberCoroutineScope()
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -150,6 +161,104 @@ fun AgentDetailScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         ProfileRow(label = "全局设定", value = agentGlobalSettings)
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ===== 记忆库 =====
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("🧠 记忆库", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("支持导出/导入 .json 或 .md 格式的记忆备份", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val memoryManager = remember { com.wechat.agent.data.MemoryManager(context.applicationContext) }
+
+                    val exportJsonLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.CreateDocument("application/json")
+                    ) { uri: Uri? ->
+                        uri?.let {
+                            scope.launch {
+                                runCatching {
+                                    context.contentResolver.openOutputStream(it)?.use { out ->
+                                        out.write(memoryManager.exportJson().toByteArray())
+                                    }
+                                }
+                                snackbarHostState.showSnackbar("记忆已导出为 JSON")
+                            }
+                        }
+                    }
+
+                    val exportMdLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.CreateDocument("text/markdown")
+                    ) { uri: Uri? ->
+                        uri?.let {
+                            scope.launch {
+                                runCatching {
+                                    context.contentResolver.openOutputStream(it)?.use { out ->
+                                        out.write(memoryManager.exportMarkdown().toByteArray())
+                                    }
+                                }
+                                snackbarHostState.showSnackbar("记忆已导出为 Markdown")
+                            }
+                        }
+                    }
+
+                    val importLauncher = rememberLauncherForActivityResult(
+                        ActivityResultContracts.GetContent()
+                    ) { uri: Uri? ->
+                        uri?.let {
+                            scope.launch {
+                                val raw = runCatching {
+                                    context.contentResolver.openInputStream(it)?.bufferedReader()?.use { r -> r.readText() }
+                                }.getOrNull() ?: ""
+                                val content = raw.removePrefix("\uFEFF").trimStart()
+                                val ok = when {
+                                    content.isBlank() -> false
+                                    content.startsWith("{") -> {
+                                        memoryManager.importJson(content) || memoryManager.importMarkdown(content)
+                                    }
+                                    else -> memoryManager.importMarkdown(content)
+                                }
+                                snackbarHostState.showSnackbar(
+                                    if (ok) "记忆导入成功" else "导入失败：无法识别的格式"
+                                )
+                            }
+                        }
+                    }
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { exportJsonLauncher.launch("agent_memory.json") },
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)
+                        ) { Text("导出 .json", fontWeight = FontWeight.Medium) }
+                        Button(
+                            onClick = { exportMdLauncher.launch("agent_memory.md") },
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen.copy(alpha = 0.8f))
+                        ) { Text("导出 .md", fontWeight = FontWeight.Medium) }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = { importLauncher.launch("*/*") },
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) { Text("导入记忆（自动识别 json / md）", fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface) }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("导入会覆盖当前记忆，请谨慎操作", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
                 }
             }
 

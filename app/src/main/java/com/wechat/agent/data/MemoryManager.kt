@@ -209,7 +209,9 @@ class MemoryManager(context: Context) {
 
     suspend fun importJson(json: String): Boolean = mutex.withLock {
         try {
-            val backup = gson.fromJson(json, MemoryBackup::class.java)
+            // 兼容带 UTF-8 BOM 的文件头，避免 gson 解析失败
+            val cleaned = json.removePrefix("\uFEFF").trim()
+            val backup = gson.fromJson(cleaned, MemoryBackup::class.java)
             if (backup.memories.isEmpty()) return false
             backup.memories.forEach { (typeName, entries) ->
                 val type = MemoryType.values().firstOrNull { it.name == typeName } ?: return@forEach

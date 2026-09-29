@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -84,13 +83,6 @@ fun EditProfileScreen(
         }
     }
 
-    val avatarOptions = listOf(
-        "👤", "😀", "😎", "🤓", "🥰", "😇", "🤩", "😜",
-        "🐱", "🐶", "🦊", "🐼", "🐨", "🦄", "🐙", "🐸",
-        "🌻", "🌙", "⭐", "🔥", "🌈", "🍀", "🎈", "🎧",
-        "👨‍💻", "👩‍🎨", "🦸", "🧙", "🤖", "👑", "💃", "🏆"
-    )
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -133,37 +125,6 @@ fun EditProfileScreen(
                     )
                 } else {
                     Text(avatar.ifEmpty { "👤" }, fontSize = 44.sp)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 默认头像选择
-            Text("选择默认头像", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Medium)
-            Spacer(modifier = Modifier.height(8.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                avatarOptions.forEach { option ->
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (avatar == option && avatarUri.isEmpty()) WeChatGreen.copy(alpha = 0.2f)
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            )
-                            .border(
-                                width = 2.dp,
-                                color = if (avatar == option && avatarUri.isEmpty()) WeChatGreen
-                                        else androidx.compose.ui.graphics.Color.Transparent,
-                                shape = CircleShape
-                            )
-                            .clickable { avatar = option; avatarUri = "" },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(option, fontSize = 22.sp)
-                    }
                 }
             }
 

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -92,13 +91,6 @@ fun AgentSetupScreen(
         }
     }
 
-    val avatarOptions = listOf(
-        "🤖", "🦾", "🧠", "⚡", "🔥", "💎", "🌟", "🎯",
-        "🐱", "🐶", "🦊", "🐼", "🐨", "🦄", "🐙", "👽",
-        "😎", "🤓", "🧑‍💻", "🦸", "🧙", "🧚", "👑", "💃",
-        "👩‍🎨", "👨‍🎤", "🌸", "🌙"
-    )
-
     fun doSave() {
         val finalName = name.trim().ifEmpty { "AI伴侣" }
         onSave(finalName, gender.trim().ifEmpty { "女" }, age.trim().ifEmpty { "18" },
@@ -132,7 +124,7 @@ fun AgentSetupScreen(
             // 头像
             Text("头像", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(4.dp))
-            Text("选择表情 或 点击头像从相册上传", style = MaterialTheme.typography.bodySmall,
+            Text("默认显示默认头像，可点击头像从相册上传", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -159,25 +151,6 @@ fun AgentSetupScreen(
                     Icon(Icons.Default.PhotoLibrary, contentDescription = "", tint = WeChatGreen)
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("从相册上传", style = MaterialTheme.typography.bodySmall, color = WeChatGreen)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                avatarOptions.forEach { option ->
-                    Box(
-                        modifier = Modifier.size(42.dp).clip(CircleShape)
-                            .background(
-                                if (avatar == option && avatarUri.isEmpty()) WeChatGreen.copy(alpha = 0.15f)
-                                else MaterialTheme.colorScheme.surfaceVariant
-                            )
-                            .then(
-                                if (avatar == option && avatarUri.isEmpty()) Modifier.border(2.dp, WeChatGreen, CircleShape)
-                                else Modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-                            )
-                            .clickable { avatar = option; avatarUri = "" },
-                        contentAlignment = Alignment.Center
-                    ) { Text(option, fontSize = MaterialTheme.typography.titleLarge.fontSize) }
                 }
             }
 

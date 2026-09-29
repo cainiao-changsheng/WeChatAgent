@@ -174,7 +174,8 @@ fun AppNavigation() {
                 onPauseMusic = { chatViewModel.pauseMusic() },
                 onSkipNext = { chatViewModel.skipNextMusic() },
                 onSkipPrev = { chatViewModel.skipPrevMusic() },
-                onOpenMusicApp = { chatViewModel.openMusicApp() }
+                onOpenMusicApp = { chatViewModel.openMusicApp() },
+                onTypingChange = { chatViewModel.setUserTyping(it) }
             )
         }
 
@@ -228,8 +229,22 @@ fun AppNavigation() {
 
         composable("settingsDetail") {
             SettingsScreen(
-                viewModel = settingsViewModel,
                 showBack = true,
+                onBack = { navController.popBackStack() },
+                onOpenModelConfig = { navController.navigate("modelConfig") },
+                onOpenUpdateCheck = { navController.navigate("updateCheck") }
+            )
+        }
+
+        composable("modelConfig") {
+            ModelConfigScreen(
+                viewModel = settingsViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("updateCheck") {
+            UpdateCheckScreen(
                 onBack = { navController.popBackStack() }
             )
         }
