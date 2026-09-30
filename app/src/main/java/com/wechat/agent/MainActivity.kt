@@ -83,6 +83,7 @@ fun AppNavigation() {
         composable("chatList") {
             ChatListScreen(
                 chats = chats, agentAvatar = agentAvatar, agentAvatarUri = agentAvatarUri,
+                profiles = agentProfiles,
                 onChatClick = { chatId -> chatViewModel.selectChat(chatId); navController.navigate("chat/$chatId") },
                 onNewChat = { navController.navigate("chat/${chatViewModel.createNewChat()}") },
                 onDeleteChat = { chatViewModel.deleteChat(it) },
