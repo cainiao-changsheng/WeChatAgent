@@ -84,6 +84,7 @@ fun AdvancedScreen(
     var sendDelayMs by remember { mutableStateOf(initial.sendDelayMs) }
     var splitMessages by remember { mutableStateOf(initial.splitMessages) }
     var autoCollapseThinking by remember { mutableStateOf(initial.autoCollapseThinking) }
+    var agentTools by remember { mutableStateOf(initial.agentTools) }
 
     // 跳转菜单子配置展开状态
     var thinkExpanded by remember { mutableStateOf(false) }
@@ -112,6 +113,7 @@ fun AdvancedScreen(
         sendDelayMs = initial.sendDelayMs
         splitMessages = initial.splitMessages
         autoCollapseThinking = initial.autoCollapseThinking
+        agentTools = initial.agentTools
         sendDelayText = initial.sendDelayMs.toString()
         thinkDisplay = initial.thinkDisplay
     }
@@ -128,7 +130,8 @@ fun AdvancedScreen(
                 sendDelayMs = sendDelayText.toIntOrNull()?.coerceIn(0, 60000) ?: 0,
                 splitMessages = splitMessages,
                 thinkDisplay = thinkDisplay,
-                autoCollapseThinking = autoCollapseThinking
+                autoCollapseThinking = autoCollapseThinking,
+                agentTools = agentTools
             )
         )
     }
@@ -306,6 +309,14 @@ fun AdvancedScreen(
                     subtitle = "AI回复多行时自动拆分为多条消息；关闭则合并为单条“一问一答”",
                     checked = splitMessages,
                     onCheckedChange = { splitMessages = it; saveSettings() }
+                )
+
+                // 9. Agent 模式（只读工具）
+                AdvancedSwitchRow(
+                    title = "Agent 模式",
+                    subtitle = "AI可主动查询当前时间、对方屏幕使用时间、记忆库后再回复；暂为一次成型回复，非逐字流式",
+                    checked = agentTools,
+                    onCheckedChange = { agentTools = it; saveSettings() }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))

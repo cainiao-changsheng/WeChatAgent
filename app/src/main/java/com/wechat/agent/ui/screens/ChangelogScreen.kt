@@ -70,6 +70,16 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.19",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "新增：Agent 模式（阶段 1）",
+                        "AI 可主动查询当前时间、对方今日屏幕使用时间、记忆库后再回复",
+                        "新增「高级设置 → Agent 模式」开关，默认开启",
+                        "模型不支持工具调用时自动降级为普通文本回复"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.18",
                     date = "2026-09-30",
                     items = listOf(
@@ -78,7 +88,7 @@ fun ChangelogScreen(
                         "锁屏控制：锁屏自动暂停所选音乐，解锁自动恢复播放",
                         "音乐播放器控制：可从已安装音乐 App 中选择并接管播放/暂停/切歌",
                         "热恋模式下 AI 会感知热恋状态，主动表达关心与牵挂",
-                        "新增「AI 后台主动发消息」开关：热恋模式下 AI 每 30 分钟主动联系你"
+                        "新增「AI 后台主动发消息」开关：热恋模式下 AI 会主动联系你，发送间隔由 AI 按角色自定，可手动微调"
                     )
                 ),
                 ChangelogEntry(

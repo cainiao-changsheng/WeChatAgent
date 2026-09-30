@@ -49,7 +49,13 @@ data class HotLoveSettings(
     val enabled: Boolean = false,
     val selectedMusicPackage: String = "",
     val lockScreenPause: Boolean = true,
-    val proactiveMessages: Boolean = false
+    val proactiveMessages: Boolean = false,
+    /** AI 后台主动发消息的时间间隔（分钟）。默认 30；开启后由大模型按角色设定自定一次，用户可在热恋模式页手动修改。 */
+    val proactiveIntervalMinutes: Int = 30,
+    /** 当前间隔是否由大模型决定（用户手动修改后置 false，避免 AI 覆盖用户自定义值）。 */
+    val proactiveIntervalFromAi: Boolean = false,
+    /** 用户是否手动设置过间隔（置 true 后 AI 不再自动覆盖，除非值仍为默认 30）。 */
+    val proactiveIntervalUserSet: Boolean = false
 )
 
 /** 高级设置（我 → 高级 页），对应参考图"思考设置"各功能项。 */
@@ -62,7 +68,9 @@ data class AdvancedSettings(
     val sendDelayMs: Int = 0,
     val splitMessages: Boolean = false,
     val thinkDisplay: Boolean = true,
-    val autoCollapseThinking: Boolean = false
+    val autoCollapseThinking: Boolean = false,
+    /** Agent 模式：聊天时向大模型暴露只读工具（时间/屏幕使用时间/记忆查询），模型可主动调用。 */
+    val agentTools: Boolean = true
 )
 
 class SettingsManager private constructor(private val context: Context) {
@@ -218,8 +226,13 @@ class SettingsManager private constructor(private val context: Context) {
             .putString("hotlove_music_package", settings.selectedMusicPackage ?: "")
             .putBoolean("hotlove_lock_screen_pause", settings.lockScreenPause)
             .putBoolean("hotlove_proactive_messages", settings.proactiveMessages)
+            .putInt("hotlove_proactive_interval_minutes", settings.proactiveIntervalMinutes.coerceIn(5, 1440))
+            .putBoolean("hotlove_proactive_interval_from_ai", settings.proactiveIntervalFromAi)
+            .putBoolean("hotlove_proactive_interval_user_set", settings.proactiveIntervalUserSet)
             .apply()
-        _hotLoveSettings.value = settings
+        _hotLoveSettings.value = settings.copy(
+            proactiveIntervalMinutes = settings.proactiveIntervalMinutes.coerceIn(5, 1440)
+        )
     }
 
     fun getHotLoveSettingsSync(): HotLoveSettings = _hotLoveSettings.value
@@ -229,7 +242,10 @@ class SettingsManager private constructor(private val context: Context) {
             enabled = profilePrefs.getBoolean("hotlove_enabled", false),
             selectedMusicPackage = profilePrefs.getString("hotlove_music_package", "") ?: "",
             lockScreenPause = profilePrefs.getBoolean("hotlove_lock_screen_pause", true),
-            proactiveMessages = profilePrefs.getBoolean("hotlove_proactive_messages", false)
+            proactiveMessages = profilePrefs.getBoolean("hotlove_proactive_messages", false),
+            proactiveIntervalMinutes = profilePrefs.getInt("hotlove_proactive_interval_minutes", 30).coerceIn(5, 1440),
+            proactiveIntervalFromAi = profilePrefs.getBoolean("hotlove_proactive_interval_from_ai", false),
+            proactiveIntervalUserSet = profilePrefs.getBoolean("hotlove_proactive_interval_user_set", false)
         )
     }
 
@@ -249,6 +265,7 @@ class SettingsManager private constructor(private val context: Context) {
             .putBoolean("adv_split_messages", settings.splitMessages)
             .putBoolean("adv_think_display", settings.thinkDisplay)
             .putBoolean("adv_auto_collapse_think", settings.autoCollapseThinking)
+            .putBoolean("adv_agent_tools", settings.agentTools)
             .apply()
         _advancedSettings.value = settings.copy(
             sendDelayMs = settings.sendDelayMs.coerceIn(0, 60000)
@@ -267,7 +284,8 @@ class SettingsManager private constructor(private val context: Context) {
             sendDelayMs = profilePrefs.getInt("adv_send_delay_ms", 0).coerceIn(0, 60000),
             splitMessages = profilePrefs.getBoolean("adv_split_messages", false),
             thinkDisplay = profilePrefs.getBoolean("adv_think_display", true),
-            autoCollapseThinking = profilePrefs.getBoolean("adv_auto_collapse_think", false)
+            autoCollapseThinking = profilePrefs.getBoolean("adv_auto_collapse_think", false),
+            agentTools = profilePrefs.getBoolean("adv_agent_tools", true)
         )
     }
 

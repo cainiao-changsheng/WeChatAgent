@@ -1,9 +1,14 @@
 package com.wechat.agent.viewmodel
 
 import android.app.Application
+import android.app.AppOpsManager
+import android.app.usage.UsageStatsManager
+import android.content.Context
 import android.content.SharedPreferences
+import android.os.Process
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.wechat.agent.agent.AgentToolRegistry
 import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.EmojiManager
 import com.wechat.agent.data.EmotionEngine
@@ -41,6 +46,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -137,9 +143,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var deliveryJob: Job? = null
     private var statusJob: Job? = null
     private var backupJob: Job? = null
+    private var proactiveJob: Job? = null
     private var lastUserMessageTime: Long = 0
     private var messageDeliverySequence = 0
     private var lastBackupAt: Long = 0
+
+    companion object {
+        /** 热恋模式主动消息：上次主动联系的时间戳 key（agent_status 独立存储）。 */
+        private const val KEY_HOTLOVE_LAST_PROACTIVE = "hotlove_last_proactive_at"
+    }
 
     init {
         // 一次性迁移：v1.0.13 及之前聊天列表按角色隔离（chat_sessions_<agentId>），
@@ -213,6 +225,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             startStatusLoop()
             startBackupLoop()
+            startProactiveLoop()
         }
     }
 
@@ -229,6 +242,61 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 refreshAgentStatus()
             }
         }
+    }
+
+    /**
+     * 热恋模式「AI 后台主动发消息」循环：每 60 秒检查一次。
+     * 时间间隔由大模型按角色设定自定一次（proactiveIntervalFromAi 置 true），
+     * 用户可在热恋模式页手动修改该值（修改后置 false，AI 不再覆盖）；此后按该间隔主动联系。
+     */
+    private fun startProactiveLoop() {
+        proactiveJob?.cancel()
+        proactiveJob = viewModelScope.launch {
+            while (isActive) {
+                delay(60 * 1000L)
+                try {
+                    val hotLove = settingsManager.getHotLoveSettingsSync()
+                    if (!hotLove.enabled || !hotLove.proactiveMessages) continue
+                    if (_userTyping.value) continue
+
+                    // 若间隔尚未由大模型决定且用户未手动设置过，则询问一次并保存
+                    if (!hotLove.proactiveIntervalFromAi && !hotLove.proactiveIntervalUserSet) {
+                        ensureProactiveIntervalDecided()
+                    }
+                    val current = settingsManager.getHotLoveSettingsSync()
+                    val intervalMs = current.proactiveIntervalMinutes.coerceIn(5, 1440) * 60 * 1000L
+                    val now = System.currentTimeMillis()
+                    val lastProactive = statusPrefs.getLong(KEY_HOTLOVE_LAST_PROACTIVE, 0L)
+                    if (now - lastProactive >= intervalMs) {
+                        statusPrefs.edit().putLong(KEY_HOTLOVE_LAST_PROACTIVE, now).apply()
+                        sendProactiveContact("你们正处于热恋时期，你时时刻刻想知道 Ta 在做什么、想时刻和他联系")
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    /** 向大模型询问主动联系间隔（分钟），按角色设定自定；解析失败保持默认。 */
+    private suspend fun ensureProactiveIntervalDecided() {
+        try {
+            val apiKey = settingsManager.apiKey.first()
+            if (apiKey.isEmpty()) return
+            val model = settingsManager.modelName.first()
+            val chatId = _currentChatId.value ?: createNewChat()
+            val persona = buildPersonaPrompt(chatId.let { cid -> _chats.value.find { it.id == cid }?.agentId })
+            val prompt = (if (persona.isNotBlank()) "$persona\n\n" else "") +
+                "根据你现在扮演的角色设定，请确定你每隔多少分钟会主动联系对方一次。只输出一个 5 到 1440 之间的整数（分钟），不要输出任何其他文字、解释或符号。"
+            val result = repository.sendMessage(model, apiKey,
+                listOf(ChatMessage(role = "user", content = prompt)))
+            val raw = result.getOrNull()?.trim()?.take(20) ?: return
+            val minutes = Regex("""\d+""").find(raw)?.value?.toIntOrNull()
+            if (minutes != null && minutes in 5..1440) {
+                val s = settingsManager.getHotLoveSettingsSync()
+                settingsManager.saveHotLoveSettings(
+                    s.copy(proactiveIntervalMinutes = minutes, proactiveIntervalFromAi = true)
+                )
+            }
+        } catch (_: Exception) {}
     }
 
     /** 记忆库自动备份循环：按用户设置间隔执行备份。 */
@@ -279,13 +347,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (status.shouldContactUser) {
                 statusPrefs.edit().putLong(LifeDecisionEngine.LAST_CONTACT_KEY, now).apply()
                 sendProactiveContact(status.contactReason)
-            }
-
-            // 热恋模式：开启「AI 后台主动发消息」后，每轮状态刷新都主动联系，不受决策引擎随机限制
-            val hotLove = settingsManager.getHotLoveSettingsSync()
-            if (hotLove.enabled && hotLove.proactiveMessages && !_userTyping.value) {
-                statusPrefs.edit().putLong(LifeDecisionEngine.LAST_CONTACT_KEY, now).apply()
-                sendProactiveContact("你们正处于热恋时期，你时时刻刻想知道 Ta 在做什么、想时刻和他联系")
             }
         } catch (_: Exception) {}
     }
@@ -362,8 +423,76 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine("【热恋模式 - 当前你们正处于热恋时期】")
                 appendLine("你们现在正处于热恋时期，你时时刻刻想要知道 Ta 在做什么、干什么，想要时刻和他联系。")
                 appendLine("你已经获得授权：可以查看 Ta 的手机屏幕使用时间数据，并在锁屏/解锁时自动暂停/恢复 Ta 所选音乐播放器。这些能力由系统自动执行，你在对话中应自然表达关心与牵挂，不要说破具体是软件权限。")
+                val usage = buildScreenUsageSummary()
+                if (usage.isNotBlank()) {
+                    appendLine()
+                    appendLine("【Ta 今日屏幕使用情况（真实数据）】")
+                    appendLine(usage)
+                    appendLine("你可以基于这些真实数据自然地关心 Ta（例如注意到 Ta 用了很久手机/某个 App 使用很多），但不要说破"这是读取的手机数据"，更不要输出这段原始数据本身。")
+                }
             }
         }
+    }
+
+    /**
+     * 读取今日（当天 0 点起）真实屏幕使用时间并格式化为给大模型的摘要。
+     * 仅当已授予「使用情况访问权限」且确有数据时返回非空字符串；否则返回空串（模型不会拿到数据）。
+     */
+    private fun buildScreenUsageSummary(): String {
+        return try {
+            val context = getApplication<Application>()
+            val appOps = context.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            @Suppress("DEPRECATION")
+            val granted = appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(),
+                context.packageName
+            ) == AppOpsManager.MODE_ALLOWED
+            if (!granted) return ""
+
+            val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+            val cal = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val dayStart = cal.timeInMillis
+            val now = System.currentTimeMillis()
+            val stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, dayStart, now)
+            val pm = context.packageManager
+            val aggregated = stats
+                .filter { it.packageName != context.packageName && it.totalTimeInForeground > 60_000L }
+                .map { stat ->
+                    val label = try {
+                        pm.getApplicationInfo(stat.packageName, 0).loadLabel(pm).toString()
+                    } catch (_: Exception) {
+                        stat.packageName
+                    }
+                    label to stat.totalTimeInForeground
+                }
+                .groupBy { it.first }
+                .map { (label, list) -> label to list.sumOf { it.second } }
+                .sortedByDescending { it.second }
+            if (aggregated.isEmpty()) return ""
+
+            val totalMs = aggregated.sumOf { it.second }
+            val top = aggregated.take(3).joinToString("、") { (label, ms) -> "$label ${formatUsageDuration(ms)}" }
+            buildString {
+                append("Ta 今天累计使用手机 ${formatUsageDuration(totalMs)}，使用最多的应用：$top。")
+            }
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
+    private fun formatUsageDuration(ms: Long): String {
+        val minutes = ms / 60_000
+        if (minutes < 1) return "不足1分钟"
+        if (minutes < 60) return "${minutes}分钟"
+        val h = minutes / 60
+        val m = minutes % 60
+        return if (m == 0L) "${h}小时" else "${h}小时${m}分"
     }
 
     /** AI 主动联系用户：在聊天中插入一条由 AI 性格驱动的主动消息。 */
@@ -612,8 +741,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val chatMessages = repository.buildChatMessages(model, _currentMessages.value, emotionDesc, moodDesc)
 
                 var fullReply = ""
-                val streamFlow = repository.sendMessageStream(model, apiKey, chatMessages)
-                val simulateJob = if (settingsManager.getAdvancedSettingsSync().thinkDisplay) {
+                val advanced = settingsManager.getAdvancedSettingsSync()
+                val simulateJob = if (advanced.thinkDisplay) {
                     viewModelScope.launch {
                         delay(600)
                         if (_isLoading.value && _streamingReasoning.value.isEmpty() && _streamingContent.value.isEmpty()) {
@@ -621,24 +750,53 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                 } else null
-                val collectBlock: suspend (StreamPiece) -> Unit = { piece ->
-                    if (piece.reasoning.isNotEmpty()) {
-                        simulateJob?.cancel()
-                        _streamingReasoning.value = _streamingReasoning.value + piece.reasoning
+
+                if (advanced.agentTools) {
+                    // Agent 模式（阶段 1，非流式）：暴露只读工具给模型，模型可主动查询时间/屏幕使用时间/记忆
+                    val agentResult = withTimeoutOrNull(REPLY_TIMEOUT_MS) {
+                        repository.sendAgentMessage(
+                            model = model,
+                            apiKey = apiKey,
+                            chatMessages = chatMessages,
+                            tools = AgentToolRegistry.readOnlyTools(
+                                memoryManager = memoryManager,
+                                screenUsageProvider = { buildScreenUsageSummary() }
+                            )
+                        )
                     }
-                    if (piece.content.isNotEmpty()) {
+                    if (agentResult == null) {
+                        throw TimeoutCancellationException("agent timeout")
+                    }
+                    agentResult.exceptionOrNull()?.let { throw it }
+                    fullReply = agentResult.getOrNull().orEmpty()
+                    if (fullReply.isNotEmpty()) {
                         simulateJob?.cancel()
                         if (_streamingReasoning.value.isEmpty()) {
                             _streamingReasoning.value = generateThinkingPreview(content)
                         }
-                        fullReply += piece.content
                         _streamingContent.value = fullReply
                     }
-                }
-                if (settingsManager.getAdvancedSettingsSync().timeoutDisabled) {
-                    streamFlow.collect(collectBlock)
                 } else {
-                    withTimeout(REPLY_TIMEOUT_MS) { streamFlow.collect(collectBlock) }
+                    val streamFlow = repository.sendMessageStream(model, apiKey, chatMessages)
+                    val collectBlock: suspend (StreamPiece) -> Unit = { piece ->
+                        if (piece.reasoning.isNotEmpty()) {
+                            simulateJob?.cancel()
+                            _streamingReasoning.value = _streamingReasoning.value + piece.reasoning
+                        }
+                        if (piece.content.isNotEmpty()) {
+                            simulateJob?.cancel()
+                            if (_streamingReasoning.value.isEmpty()) {
+                                _streamingReasoning.value = generateThinkingPreview(content)
+                            }
+                            fullReply += piece.content
+                            _streamingContent.value = fullReply
+                        }
+                    }
+                    if (advanced.timeoutDisabled) {
+                        streamFlow.collect(collectBlock)
+                    } else {
+                        withTimeout(REPLY_TIMEOUT_MS) { streamFlow.collect(collectBlock) }
+                    }
                 }
 
                 if (fullReply.isNotEmpty()) {

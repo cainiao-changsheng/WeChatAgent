@@ -2,12 +2,14 @@ package com.wechat.agent.data.repository
 
 import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.MemoryManager
+import com.wechat.agent.agent.AgentToolSpec
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.network.ChatRequest
 import com.wechat.agent.data.network.RetrofitClient
 import com.wechat.agent.data.network.VisionChatRequest
 import com.wechat.agent.data.network.VisionContent
 import com.wechat.agent.data.network.VisionMessage
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -21,6 +23,13 @@ class ChatRepository(private val memoryManager: MemoryManager) {
 
     /** 当前扮演好友的设定（由 ViewModel 在每次回复前注入，保证首次扮演先读设定与记忆）。 */
     var personaPrompt: String = ""
+
+    /** 记录不支持 function calling 的模型名，避免每次请求重复触发 400。 */
+    private val toolsUnsupportedModels = java.util.Collections.synchronizedSet(java.util.HashSet<String>())
+    /** Agent 执行最大轮数（含工具调用轮），防止死循环。 */
+    companion object {
+        const val MAX_AGENT_ROUNDS = 6
+    }
 
     suspend fun buildChatMessages(
         model: String,
@@ -97,6 +106,115 @@ class ChatRepository(private val memoryManager: MemoryManager) {
             throw e
         } catch (e: Exception) {
             AppLogger.log("ChatRepository", "请求异常: ${e.javaClass.simpleName}")
+            Result.failure(Exception(networkErrorMessage(e), e))
+        }
+    }
+
+    /**
+     * Agent 模式调用（阶段 1，非流式）：把只读工具暴露给模型，循环执行「请求 → 工具调用 → 本地执行 → 回填 → 再请求」，
+     * 直到模型给出纯文本回复或达到最大轮数。模型不支持 tools 参数时自动降级为普通文本请求。
+     *
+     * @param tools 工具规格清单（含执行器）
+     * @return 模型最终文本回复
+     */
+    suspend fun sendAgentMessage(
+        model: String,
+        apiKey: String,
+        chatMessages: List<ChatMessage>,
+        tools: List<AgentToolSpec>
+    ): Result<String> = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        try {
+            if (tools.isEmpty()) {
+                return@withContext sendMessage(model, apiKey, chatMessages)
+            }
+            val messages = chatMessages.toMutableList()
+            val supportsTools = !toolsUnsupportedModels.contains(model)
+            var lastText = ""
+            var lastError: Exception? = null
+
+            for (round in 0 until MAX_AGENT_ROUNDS) {
+                val request = ChatRequest(
+                    model = model,
+                    messages = messages,
+                    stream = false,
+                    tools = if (supportsTools) tools.map { it.toChatTool() } else null
+                )
+                val response = RetrofitClient.getApiService().sendMessage(
+                    authorization = "Bearer $apiKey",
+                    request = request
+                )
+                if (!response.isSuccessful) {
+                    // 若带 tools 请求被拒且该模型此前未被标记，则标记不支持并降级重试一次纯文本
+                    if (supportsTools && response.code() == 400) {
+                        toolsUnsupportedModels.add(model)
+                        AppLogger.log("ChatRepository", "模型 $model 不支持 tools，降级纯文本模式")
+                        val fallback = ChatRequest(model = model, messages = messages, stream = false)
+                        val fbResponse = RetrofitClient.getApiService().sendMessage(
+                            authorization = "Bearer $apiKey",
+                            request = fallback
+                        )
+                        if (fbResponse.isSuccessful) {
+                            val content = fbResponse.body()?.choices?.firstOrNull()?.message?.content ?: ""
+                            if (content.isNotBlank()) {
+                                return@withContext Result.success(content)
+                            }
+                        }
+                    }
+                    val message = apiErrorMessage(response.code())
+                    lastError = Exception(message)
+                    return@withContext Result.failure(lastError!!)
+                }
+
+                val choice = response.body()?.choices?.firstOrNull() ?: break
+                val message = choice.message ?: break
+                lastText = message.content ?: ""
+                val toolCalls = message.toolCalls
+                if (toolCalls.isNullOrEmpty()) {
+                    // 模型已给出最终文本回复
+                    return@withContext Result.success(lastText)
+                }
+
+                // 回填 assistant 消息（保留 tool_calls，供模型看到自己调用了什么）
+                messages.add(ChatMessage(role = "assistant", content = message.content, toolCalls = toolCalls))
+
+                // 逐个执行工具并回填 role=tool 结果
+                for (toolCall in toolCalls) {
+                    val name = toolCall.function?.name ?: continue
+                    val argsJson = toolCall.function?.arguments ?: "{}"
+                    val args: Map<String, Any?> = try {
+                        com.google.gson.Gson().fromJson(argsJson, Map::class.java) as? Map<String, Any?>
+                            ?: emptyMap()
+                    } catch (_: Exception) {
+                        emptyMap()
+                    }
+                    val spec = tools.find { it.name == name }
+                    val result = if (spec != null) {
+                        try {
+                            spec.executor(args)
+                        } catch (e: Exception) {
+                            "工具执行失败: ${e.message ?: e.javaClass.simpleName}"
+                        }
+                    } else {
+                        "未找到工具 $name"
+                    }
+                    messages.add(ChatMessage(
+                        role = "tool",
+                        content = result,
+                        toolCallId = toolCall.id
+                    ))
+                }
+                if (round == MAX_AGENT_ROUNDS - 1) {
+                    AppLogger.log("ChatRepository", "Agent 达到最大轮数 $MAX_AGENT_ROUNDS，以最后文本收尾")
+                }
+            }
+
+            // 达到最大轮数仍未得到文本：返回最后一段文本，无则报错
+            if (lastText.isNotBlank()) Result.success(lastText)
+            else Result.failure(lastError ?: Exception("AI 未返回有效回复"))
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.log("ChatRepository", "Agent 请求异常: ${e.javaClass.simpleName}")
             Result.failure(Exception(networkErrorMessage(e), e))
         }
     }

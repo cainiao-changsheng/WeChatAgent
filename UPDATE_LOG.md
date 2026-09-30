@@ -1,3 +1,14 @@
+## 1.0.19 Agent 模式阶段 1：工具调用能力（2026-09-30）
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 新增：Agent 工具注册表 | 新增 `AgentToolRegistry.kt`：以 `AgentToolSpec(name/description/parameters/executor)` 描述本地能力，可转换为 OpenAI 兼容 tools 声明；阶段 1 提供 3 个只读工具：`get_current_time`（当前日期/星期/时段）、`query_screen_time`（今日屏幕使用时长与最常用应用，未授权返回提示）、`recall_memory`（读取角色记忆库） |
+| 2 | 新增：ChatRepository.sendAgentMessage 多轮循环 | 非流式 Agent 调用：请求带 tools → 模型返回 tool_calls → 本地执行器逐个执行 → 回填 assistant(tool_calls) 与 role=tool 结果 → 再次请求，直到模型给出纯文本回复；最大 6 轮防死循环；模型不支持 tools（400）时自动记录并降级纯文本请求，同模型后续不再带 tools |
+| 3 | 扩展：ApiModels 支持 function calling | `ChatRequest` 增加 `tools`/`tool_choice`；`ChatMessage.content` 改为可空并新增 `tool_calls`/`tool_call_id`，新增 `ChatTool`/`ToolFunction`/`ToolCall`/`FunctionCall` 数据类 |
+| 4 | 接入：聊天发送走 Agent 分支 | `ChatViewModel.sendMessage` 在开启 Agent 模式时改调 `sendAgentMessage`，注入 `buildScreenUsageSummary` 作为屏幕时长提供源；回复前展示模拟思考气泡；失败/超时沿用原有友好提示 |
+| 5 | 新增：高级设置「Agent 模式」开关 | `AdvancedSettings` 新增 `agentTools`（默认开），持久化 `adv_agent_tools`；`AdvancedScreen` 新增开关行，说明当前为一次成型回复（非流式） |
+| 6 | 说明：阶段 1 仅只读工具 | 写操作（音乐/锁屏/主动发消息/发动态）留待阶段 2，将加用户确认机制后再开放 |
+
 ## 1.0.17 体验修复（2026-09-30）
 
 - 修复：开启「多行文本自动分割」后不再重复出现多段思考气泡，思考过程只挂载在第一条分段消息。

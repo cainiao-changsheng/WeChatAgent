@@ -9,6 +9,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Process
 import android.provider.Settings
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -250,7 +251,7 @@ fun HotLoveScreen(
                         Text("AI 后台主动发消息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            "热恋模式下 AI 会每 30 分钟主动联系你，时刻想和你说话",
+                            "热恋模式下 AI 会按设定间隔主动联系你，间隔由大模型按角色自定，可手动修改",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                         )
@@ -261,6 +262,66 @@ fun HotLoveScreen(
                             viewModel.saveHotLoveSettings(settings.copy(proactiveMessages = value))
                         }
                     )
+                }
+                if (settings.proactiveMessages) {
+                    // 主动发消息间隔：大模型按角色自定一次，用户可手动修改（修改后 AI 不再覆盖）
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .padding(8.dp)
+                        ) {
+                            Icon(Icons.Default.Timer, contentDescription = null, tint = WeChatGreen)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "主动发消息间隔",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                when {
+                                    settings.proactiveIntervalFromAi -> "由大模型按角色自定，可手动修改"
+                                    settings.proactiveIntervalUserSet -> "手动设置（大模型不再自动覆盖）"
+                                    else -> "大模型将在下次主动消息前自定间隔，可手动修改"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IntervalStepButton("-", enabled = settings.proactiveIntervalMinutes > 5) {
+                                viewModel.saveHotLoveSettings(
+                                    settings.copy(
+                                        proactiveIntervalMinutes = (settings.proactiveIntervalMinutes - 5).coerceAtLeast(5),
+                                        proactiveIntervalFromAi = false,
+                                        proactiveIntervalUserSet = true
+                                    )
+                                )
+                            }
+                            Text(
+                                "${settings.proactiveIntervalMinutes} 分钟",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(horizontal = 10.dp)
+                            )
+                            IntervalStepButton("+", enabled = settings.proactiveIntervalMinutes < 1440) {
+                                viewModel.saveHotLoveSettings(
+                                    settings.copy(
+                                        proactiveIntervalMinutes = (settings.proactiveIntervalMinutes + 5).coerceAtMost(1440),
+                                        proactiveIntervalFromAi = false,
+                                        proactiveIntervalUserSet = true
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -401,6 +462,30 @@ fun HotLoveScreen(
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
         }
+    }
+}
+
+/** 主动发消息间隔的步进按钮（- / +，步长 5 分钟）。 */
+@Composable
+private fun IntervalStepButton(
+    text: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val shape = RoundedCornerShape(6.dp)
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+            .then(Modifier.background(MaterialTheme.colorScheme.surfaceVariant, shape)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface
+                   else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+        )
     }
 }
 
