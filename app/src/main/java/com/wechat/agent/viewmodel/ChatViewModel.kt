@@ -356,7 +356,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val raw = repository.sendMessage(model, apiKey,
                 listOf(ChatMessage(role = "user", content = prompt))).getOrNull() ?: return null
             val jsonStr = raw.substringAfter("{").let { "{" + it }.substringBeforeLast("}")
-            val map = Gson().fromJson(jsonStr, object : TypeToken<Map<String, String>>() {}.type) ?: return null
+            val map = Gson().fromJson<Map<String, String>>(jsonStr, object : TypeToken<Map<String, String>>() {}.type) ?: return null
             RandomAgentProfile(
                 name = map["name"]?.trim()?.take(12)?.ifEmpty { "新朋友" } ?: "新朋友",
                 gender = if (map["gender"]?.trim() == "男") "男" else "女",

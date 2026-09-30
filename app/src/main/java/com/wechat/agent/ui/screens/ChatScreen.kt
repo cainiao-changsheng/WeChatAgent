@@ -946,7 +946,7 @@ fun MusicControlBar(
             modifier = Modifier
                 .weight(1f)
                 .clickable(onClick = onOpenApp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalArrangement = Arrangement.Center
         ) {
             Text(
                 text = nowPlaying.title.ifEmpty { "未知歌曲" },
