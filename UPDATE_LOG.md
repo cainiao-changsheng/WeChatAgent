@@ -114,6 +114,25 @@
 | 4 | 兼容：旧存档安全加载 | `MessageBubble` 读取 `thinking` 使用 `orEmpty()` 防御旧数据反序列化缺失字段，历史会话不崩溃 |
 | 5 | 文档：同步更新本日志 | 记录输入框避让与思考常驻改动 |
 
+## v1.0.12（2026-09-30）表情导入导出 + 发现页改造
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 新增：表情导入导出 | `EmojiManager` 支持将自定义表情打包为 zip（含 custom_stickers.json + 图片）导出，支持导入同格式 zip 恢复；表情存储于 filesDir（emoji_stickers.json + emoji_stickers_images/），退应用不丢失 |
+| 2 | 界面：聊天图片尺寸统一 | 聊天内图片消息渲染统一按固定最大尺寸展示，大小图不再参差 |
+| 3 | 新增：底部「发现」页（原「发现」更名「动态」） | 底部导航新增「发现」Tab，原「发现」页更名为「动态」；新建 `DiscoverScreen.kt` 承载发现页内容 |
+| 4 | 新增：全知全能观察者时间线记录 | 新增 `ObservationStore.kt` 记录观察者时间线事件；`ChatViewModel` 接入观察记录存储与读取，发现页展示时间线 |
+| 5 | 界面：发现页顶部栏对齐 | `DiscoverScreen` 顶部栏复用 `CenteredTopBar`（56dp + statusBarsPadding），与聊天/通讯录/我各导航页对齐 |
+
+## v1.0.11（2026-09-30）图片表情系统 + 聊天图片自动缓存
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 新增：图片表情系统（json 管理） | 新增 `EmojiManager.kt`：从相册选取图片 + 备注/快捷名称，保存为 filesDir/emoji_stickers.json，聊天界面与大模型均可读取 |
+| 2 | 新增：输入联想 / 大模型可读表情 | 聊天输入时按表情名联想插入；表情以文本描述注入提示上下文，大模型可读取表情含义 |
+| 3 | 新增：聊天图片自动缓存 | `ImageCacheHelper.cacheToInternal` 将相册 content:// 图片复制到内部存储（chat_images/），`sendImageMessage` 先缓存再存本地路径；重开应用图片不丢失 |
+| 4 | 修复：思考气泡去重 | `MessageBubble` 对含思考的 agent 消息仅渲染一次常驻 `ThinkingBubble`，避免重复气泡 |
+
 ## 构建与发布说明
 
 - 分支：`master`，JDK 21 / Gradle 8.11.1，GitHub Actions 构建 debug APK（artifact：WeChatAgent-APK）。

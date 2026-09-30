@@ -11,8 +11,8 @@ android {
         applicationId = "com.wechat.agent"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.7"
+        versionCode = 12
+        versionName = "1.0.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

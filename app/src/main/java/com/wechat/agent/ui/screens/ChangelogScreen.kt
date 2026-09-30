@@ -70,6 +70,43 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.12",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "表情支持导入导出（zip / JSON）",
+                        "聊天图片尺寸统一展示",
+                        "底部新增「发现」页，原「发现」更名「动态」",
+                        "发现页支持全知全能观察者时间线记录",
+                        "发现页顶部栏与其它导航页对齐"
+                    )
+                ),
+                ChangelogEntry(
+                    version = "v1.0.11",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "新增图片表情系统，表情以 JSON 管理",
+                        "聊天输入支持表情联想，大模型可读取表情含义",
+                        "聊天图片自动缓存，退出重开不丢失",
+                        "修复思考气泡重复显示问题"
+                    )
+                ),
+                ChangelogEntry(
+                    version = "v1.0.10",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "修复聊天输入框被输入法遮挡的问题",
+                        "思考过程气泡常驻显示，回复完成不再消失",
+                        "模拟思考更快出现，减少等待卡顿"
+                    )
+                ),
+                ChangelogEntry(
+                    version = "v1.0.9",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "修复默认模型无思考内容时气泡不显示，增加模拟思考兜底"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.8",
                     date = "2026-09-30",
                     items = listOf(
