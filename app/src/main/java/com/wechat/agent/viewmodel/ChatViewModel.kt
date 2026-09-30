@@ -967,7 +967,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val chatId = _currentChatId.value ?: createNewChat()
         _chats.value.find { it.id == chatId }?.agentId?.takeIf { it.isNotBlank() }
             ?.let { memoryManager.setActiveAgent(it) }
-        val userMessage = Message(content = "[图片]", role = Role.USER, imageUri = uri)
+        val userMessage = Message(content = "", role = Role.USER, imageUri = uri)
         val updatedMessages = _currentMessages.value + userMessage
         _currentMessages.value = updatedMessages
         syncChatInList(chatId, "[图片]", updatedMessages)
@@ -995,14 +995,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val emotionDesc = "好感度${finalState.affinity}/100·${finalState.mood.label}"
                 val moodDesc = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
                 repository.personaPrompt = buildPersonaPrompt(_chats.value.find { it.id == chatId }?.agentId)
-                val chatMessages = repository.buildChatMessages(model, updatedMessages, emotionDesc, moodDesc)
+                val imageDataUrl = readImageAsBase64(uri)
+                val replyFlow = if (imageDataUrl != null) {
+                    repository.sendVisionMessageStream(
+                        model, apiKey,
+                        repository.buildVisionChatMessages(
+                            model, updatedMessages,
+                            mapOf(userMessage.id to imageDataUrl),
+                            emotionDesc, moodDesc
+                        )
+                    )
+                } else {
+                    repository.sendMessageStream(
+                        model, apiKey,
+                        repository.buildChatMessages(model, updatedMessages, emotionDesc, moodDesc)
+                    )
+                }
 
                 var fullReply = ""
-                repository.sendMessageStream(model, apiKey, chatMessages)
-                    .collect { chunk ->
-                        fullReply += chunk
-                        _streamingContent.value = fullReply
-                    }
+                replyFlow.collect { chunk ->
+                    fullReply += chunk
+                    _streamingContent.value = fullReply
+                }
 
                 if (fullReply.isNotEmpty()) {
                     val cleaned = fullReply

@@ -29,4 +29,12 @@ interface ApiService {
         @Header("Authorization") authorization: String,
         @Body request: VisionChatRequest
     ): Response<ChatResponse>
+
+    /** 多模态流式请求：聊天中发送图片后，让支持识图的模型直接看图回复。 */
+    @Headers("Content-Type: application/json")
+    @POST("v1/chat/completions")
+    suspend fun sendVisionMessageStream(
+        @Header("Authorization") authorization: String,
+        @Body request: VisionChatRequest
+    ): Response<okhttp3.ResponseBody>
 }

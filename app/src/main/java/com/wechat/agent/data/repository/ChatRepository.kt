@@ -134,6 +134,68 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         }
     }
 
+    /** 构造多模态消息列表：复用纯文本消息列表，将含图片的消息扩展为 text + image_url（data URL）。 */
+    suspend fun buildVisionChatMessages(
+        model: String,
+        messages: List<com.wechat.agent.data.model.Message>,
+        imageDataUrls: Map<String, String>,
+        emotionDesc: String,
+        moodDesc: String
+    ): List<VisionMessage> {
+        val textMessages = buildChatMessages(model, messages, emotionDesc, moodDesc)
+        val visionMessages = mutableListOf<VisionMessage>()
+        textMessages.forEachIndexed { index, tm ->
+            val original = if (index == 0) null else messages.getOrNull(index - 1)
+            val dataUrl = original?.let { imageDataUrls[it.id] }
+            val text = if (original != null && original.content.isEmpty()) "[图片]" else tm.content
+            val content = mutableListOf(VisionContent(type = "text", text = text))
+            if (dataUrl != null) {
+                content.add(VisionContent(type = "image_url", imageUrl = mapOf("url" to dataUrl)))
+            }
+            visionMessages.add(VisionMessage(role = tm.role, content = content))
+        }
+        return visionMessages
+    }
+
+    /** 多模态流式请求（SSE），用于聊天中发送图片后让支持识图的模型直接看图回复。 */
+    fun sendVisionMessageStream(
+        model: String,
+        apiKey: String,
+        messages: List<VisionMessage>
+    ): Flow<String> = flow {
+        try {
+            val request = VisionChatRequest(model = model, messages = messages, stream = true)
+            val response = RetrofitClient.getApiService().sendVisionMessageStream(
+                authorization = "Bearer $apiKey",
+                request = request
+            )
+            if (response.isSuccessful) {
+                val reader = BufferedReader(InputStreamReader(response.body()!!.byteStream()))
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    val currentLine = line ?: continue
+                    if (currentLine.startsWith("data: ")) {
+                        val data = currentLine.removePrefix("data: ").trim()
+                        if (data == "[DONE]") break
+                        try {
+                            val chunk = com.google.gson.Gson().fromJson(
+                                data, com.wechat.agent.data.network.StreamChunk::class.java
+                            )
+                            val content = chunk.choices?.firstOrNull()?.delta?.content ?: ""
+                            if (content.isNotEmpty()) emit(content)
+                        } catch (_: Exception) {}
+                    }
+                }
+                reader.close()
+            } else {
+                val errorBody = response.errorBody()?.string() ?: ""
+                throw Exception("API 错误: $errorBody")
+            }
+        } catch (e: Exception) {
+            throw e
+        }
+    }.flowOn(Dispatchers.IO)
+
     fun sendMessageStream(
         model: String,
         apiKey: String,

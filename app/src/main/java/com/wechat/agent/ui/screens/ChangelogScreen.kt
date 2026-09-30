@@ -70,6 +70,65 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.7-2",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "高级页移除「保存 / 测试 / 取消」按钮，设置改动即时生效",
+                        "修复发送图片后显示「[图片]」占位文本的问题，AI 可直接查看图片内容并回复",
+                        "聊天「+」弹层升级为 2×4 网格：相册 / 拍摄 / 位置 / 语音输入 / 收藏 / 个人名片 / 文件 / 音乐，发送图片移入「相册」"
+                    )
+                ),
+                ChangelogEntry(
+                    version = "v1.0.7",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "新增「我 → 高级」设置页：流式输出、自定义请求参数、停用超时、自定义桌面图标、深色模式、发送延时、多行文本自动分割",
+                        "移除聊天详情页右上角音乐按钮"
+                    )
+                ),
+                ChangelogEntry(
+                    version = "v1.0.6",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "修复大模型不按好友设定名字自称的问题"
+                    )
+                ),
+                ChangelogEntry(
+                    version = "v1.0.5",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "固定 APK 签名，支持直接覆盖安装新版本"
+                    )
+                ),
+                ChangelogEntry(
+                    version = "v1.0.4",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "删除写死的「AI 伴侣」身份，AI 的名字 / 性格 / 说话风格完全按你创建的角色设定来"
+                    )
+                ),
+                ChangelogEntry(
+                    version = "v1.0.3",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "修复发现页动态作者名显示为「AI伴侣」的问题，改显真实角色名",
+                        "编辑好友文案调整：人设名字 / 人设描述 / 性格特点"
+                    )
+                ),
+                ChangelogEntry(
+                    version = "v1.0.2",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "朋友圈删除按钮移入动态卡片内",
+                        "所有页面标题居中",
+                        "聊天列表显示角色名",
+                        "编辑好友可点头像更换自定义图片",
+                        "首次使用不再预置默认好友",
+                        "首次扮演先读取设定与记忆再回复",
+                        "好友详情支持清除记忆、删除好友"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.1.0",
                     date = "2026-09-29",
                     items = listOf(

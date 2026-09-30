@@ -36,16 +36,20 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -401,33 +405,46 @@ fun ChatInputBar(
     onPlusMenuChange: (Boolean) -> Unit,
     enabled: Boolean
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Column(
+        modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
     ) {
-        IconButton(onClick = onToggleEmoji, enabled = enabled) {
-            Icon(
-                Icons.Default.EmojiEmotions,
-                contentDescription = "表情",
-                tint = if (emojiSelected) WeChatGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        // ➕ 展开的更多面板（参考图：2 行 × 4 列，深色圆角按钮）
+        AnimatedVisibility(
+            visible = plusMenuExpanded,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 4 })
+        ) {
+            PlusMenuPanel(
+                onDismiss = { onPlusMenuChange(false) },
+                onPickImage = { onPlusMenuChange(false); onPickImage() }
             )
         }
-        Spacer(modifier = Modifier.width(4.dp))
-        OutlinedTextField(
-            value = inputText, onValueChange = onInputChange, modifier = Modifier.weight(1f),
-            placeholder = { Text("输入消息...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
-            shape = RoundedCornerShape(24.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = WeChatGreen, unfocusedBorderColor = Color.Transparent,
-                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant),
-            maxLines = 4,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-            enabled = enabled
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        if (inputText.isBlank()) {
-            Box {
+
+        Row(
+            modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onToggleEmoji, enabled = enabled) {
+                Icon(
+                    Icons.Default.EmojiEmotions,
+                    contentDescription = "表情",
+                    tint = if (emojiSelected) WeChatGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            OutlinedTextField(
+                value = inputText, onValueChange = onInputChange, modifier = Modifier.weight(1f),
+                placeholder = { Text("输入消息...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
+                shape = RoundedCornerShape(24.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = WeChatGreen, unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant),
+                maxLines = 4,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                enabled = enabled
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            if (inputText.isBlank()) {
                 IconButton(
                     onClick = { onPlusMenuChange(!plusMenuExpanded) },
                     enabled = enabled,
@@ -437,26 +454,85 @@ fun ChatInputBar(
                     Icon(Icons.Default.Add, contentDescription = "更多",
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 }
-                DropdownMenu(
-                    expanded = plusMenuExpanded,
-                    onDismissRequest = { onPlusMenuChange(false) }
+            } else {
+                IconButton(
+                    onClick = onSend, enabled = enabled,
+                    modifier = Modifier.size(44.dp).clip(CircleShape).background(
+                        if (enabled) WeChatGreen else MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("发送图片") },
-                        onClick = { onPlusMenuChange(false); onPickImage() },
-                        leadingIcon = { Icon(Icons.Default.Image, contentDescription = null) }
-                    )
+                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送",
+                        tint = if (enabled) Color.White
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
                 }
             }
-        } else {
-            IconButton(
-                onClick = onSend, enabled = enabled,
-                modifier = Modifier.size(44.dp).clip(CircleShape).background(
-                    if (enabled) WeChatGreen else MaterialTheme.colorScheme.surfaceVariant)
+        }
+    }
+}
+
+/** ➕ 更多面板：深色底 2×4 网格按钮，参考图（2515.jpg）排版；仅“相册”可用（发送图片）。 */
+@Composable
+private fun PlusMenuPanel(
+    onDismiss: () -> Unit,
+    onPickImage: () -> Unit
+) {
+    val items = listOf(
+        "相册" to Icons.Default.Image,
+        "拍摄" to Icons.Default.PhotoCamera,
+        "位置" to Icons.Default.LocationOn,
+        "语音输入" to Icons.Default.Mic,
+        "收藏" to Icons.Default.Star,
+        "个人名片" to Icons.Default.Person,
+        "文件" to Icons.Default.Folder,
+        "音乐" to Icons.Default.MusicNote
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF2A2A30))
+            .padding(vertical = 10.dp)
+    ) {
+        items.chunked(4).forEach { rowItems ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送",
-                    tint = if (enabled) Color.White
-                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
+                rowItems.forEach { (label, icon) ->
+                    val isAlbum = label == "相册"
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(enabled = isAlbum) {
+                                if (isAlbum) onPickImage() else onDismiss()
+                            }
+                            .padding(vertical = 8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(54.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(
+                                    if (isAlbum) WeChatGreen.copy(alpha = 0.28f)
+                                    else Color(0xFF3A3A42)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                icon,
+                                contentDescription = label,
+                                tint = if (isAlbum) WeChatGreen else Color.White,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            label,
+                            color = Color.White.copy(alpha = 0.85f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             }
         }
     }

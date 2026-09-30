@@ -76,6 +76,15 @@
 | 3 | 移除聊天详情页右上角音乐按钮 | `ChatScreen` 顶部 actions 的 MusicNote 图标按钮删除（播放中底部控制条保留） |
 | 4 | 文档：同步更新本日志 | 记录本次高级设置与音乐按钮改动 |
 
+## v1.0.7-2（2026-09-30）识图修复 + ➕弹层重排 + 高级页去掉底部按钮
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 高级页移除“保存 / 测试 / 取消”按钮 | `AdvancedScreen` 删除底部 `BottomActionBar` 与测试弹窗；新增 `saveSettings()` 在各开关/输入变化时即时落库 |
+| 2 | 修复发送图片后显示“[图片]”占位文本且模型看不了图 | `ChatViewModel.sendImageMessage` 将消息 content 置空（气泡按 imageUri 渲染真实缩略图）；读取图片为 data URL 后改走多模态流式接口 `sendVisionMessageStream`（`ChatRepository` + `ApiService` 新增），模型（DeepSeek 支持识图）直接看图回复；读图失败自动降级纯文本 |
+| 3 | ➕ 弹层按参考图重排为 2×4 网格 | `ChatScreen` 移除单项 DropdownMenu，新增 `PlusMenuPanel`：相册/拍摄/位置/语音输入/收藏/个人名片/文件/音乐 八项深色圆角按钮；“发送图片”移入“相册”，其余按钮为占位（点击关闭面板） |
+| 4 | 文档：同步更新本日志 | 记录识图与弹层改动 |
+
 ## 构建与发布说明
 
 - 分支：`master`，JDK 21 / Gradle 8.11.1，GitHub Actions 构建 debug APK（artifact：WeChatAgent-APK）。

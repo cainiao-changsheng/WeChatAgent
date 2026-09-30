@@ -3,9 +3,7 @@ package com.wechat.agent.ui.screens
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,7 +20,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.AddToHomeScreen
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +31,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -62,9 +58,6 @@ import kotlinx.coroutines.launch
 
 /** 参考图配色：紫色强调 + 粉色按钮 */
 private val AccentPurple = Color(0xFF9C6BFF)
-private val AccentPink = Color(0xFFFF8FB1)
-private val DeepPurpleText = Color(0xFF6A1B9A)
-private val LightPinkBg = Color(0xFFFCE4EC)
 private val RowBg = Color(0xFF23262F)
 private val RowBgPressed = Color(0xFF2A2E3A)
 private val SubText = Color(0xFF8A8FA3)
@@ -72,7 +65,7 @@ private val SubText = Color(0xFF8A8FA3)
 /**
  * “我 → 高级”设置页，按参考图（2508.jpg）“思考设置”的排版与功能实现。
  * 列表项：思考设置 / 流式输出 / 自定义请求参数 / 停用超时 / 添加自定义桌面图标 /
- * 深色模式 / 发送延时 / 多行文本自动分割；底部保存 / 测试 / 取消按钮。
+ * 深色模式 / 发送延时 / 多行文本自动分割；所有改动即时落库，无底部保存按钮。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,11 +74,8 @@ fun AdvancedScreen(
     onBack: () -> Unit
 ) {
     val initial by viewModel.advancedSettings.collectAsState()
-    val apiUrl by viewModel.apiUrl.collectAsState()
-    val apiKey by viewModel.apiKey.collectAsState()
-    val modelName by viewModel.modelName.collectAsState()
 
-    // 本地编辑状态（保存时一次性落库）
+    // 本地编辑状态（改动即时落库）
     var streamEnabled by remember { mutableStateOf(initial.streamEnabled) }
     var customParams by remember { mutableStateOf(initial.customParams) }
     var timeoutDisabled by remember { mutableStateOf(initial.timeoutDisabled) }
@@ -108,8 +98,6 @@ fun AdvancedScreen(
 
     var sendDelayText by remember { mutableStateOf(initial.sendDelayMs.toString()) }
 
-    var testResult by remember { mutableStateOf<String?>(null) }
-    var testing by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -124,6 +112,21 @@ fun AdvancedScreen(
         splitMessages = initial.splitMessages
         sendDelayText = initial.sendDelayMs.toString()
         thinkDisplay = initial.streamEnabled
+    }
+
+    // 即时保存：所有开关/输入变化时直接落库，无需底部保存按钮
+    fun saveSettings() {
+        viewModel.saveAdvancedSettings(
+            AdvancedSettings(
+                streamEnabled = streamEnabled,
+                customParams = customParams.trim(),
+                timeoutDisabled = timeoutDisabled,
+                customIcon = customIcon,
+                darkMode = darkMode,
+                sendDelayMs = sendDelayText.toIntOrNull()?.coerceIn(0, 60000) ?: 0,
+                splitMessages = splitMessages
+            )
+        )
     }
 
     Scaffold(
@@ -176,7 +179,7 @@ fun AdvancedScreen(
                     SubSwitchRow(
                         label = "启用流式输出",
                         checked = streamEnabled,
-                        onCheckedChange = { streamEnabled = it }
+                        onCheckedChange = { streamEnabled = it; saveSettings() }
                     )
                     SubSwitchRow(
                         label = "逐字输出",
@@ -199,7 +202,7 @@ fun AdvancedScreen(
                 ) {
                     OutlinedTextField(
                         value = customParams,
-                        onValueChange = { customParams = it },
+                        onValueChange = { customParams = it; saveSettings() },
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                         placeholder = { Text("例如：{\"thinking\":{\"type\":\"enabled\"}}", color = SubText) },
                         textStyle = MaterialTheme.typography.bodySmall.copy(color = Color(0xFFE8E8F0)),
@@ -220,7 +223,7 @@ fun AdvancedScreen(
                     title = "停用超时",
                     subtitle = "开启后，将停用默认10分钟超时设置",
                     checked = timeoutDisabled,
-                    onCheckedChange = { timeoutDisabled = it }
+                    onCheckedChange = { timeoutDisabled = it; saveSettings() }
                 )
 
                 // 5. 添加自定义桌面图标
@@ -231,6 +234,7 @@ fun AdvancedScreen(
                         val ok = runCatching { addShortcut(context) }.getOrDefault(false)
                         if (ok) {
                             customIcon = true
+                            saveSettings()
                             scope.launch { snackbarHostState.showSnackbar("已添加自定义桌面图标") }
                         } else {
                             scope.launch { snackbarHostState.showSnackbar("当前环境不支持创建桌面快捷方式") }
@@ -248,7 +252,7 @@ fun AdvancedScreen(
                     SubSwitchRow(
                         label = "启用深色模式",
                         checked = darkMode,
-                        onCheckedChange = { darkMode = it }
+                        onCheckedChange = { darkMode = it; saveSettings() }
                     )
                 }
 
@@ -267,6 +271,7 @@ fun AdvancedScreen(
                             value = sendDelayText,
                             onValueChange = { input ->
                                 sendDelayText = input.filter { it.isDigit() }.take(5)
+                                saveSettings()
                             },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
@@ -291,62 +296,13 @@ fun AdvancedScreen(
                     title = "多行文本自动分割",
                     subtitle = "AI回复多行时自动拆分为多条消息；关闭则合并为单条“一问一答”",
                     checked = splitMessages,
-                    onCheckedChange = { splitMessages = it }
+                    onCheckedChange = { splitMessages = it; saveSettings() }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
             }
-
-            // 底部固定操作区：保存 / 测试（圆形边框）+ 取消（宽幅圆角）
-            BottomActionBar(
-                onSave = {
-                    viewModel.saveAdvancedSettings(
-                        AdvancedSettings(
-                            streamEnabled = streamEnabled,
-                            customParams = customParams.trim(),
-                            timeoutDisabled = timeoutDisabled,
-                            customIcon = customIcon,
-                            darkMode = darkMode,
-                            sendDelayMs = sendDelayText.toIntOrNull()?.coerceIn(0, 60000) ?: 0,
-                            splitMessages = splitMessages
-                        )
-                    )
-                    scope.launch { snackbarHostState.showSnackbar("高级设置已保存") }
-                    onBack()
-                },
-                onTest = {
-                    testing = true
-                    viewModel.testModelConnection(apiUrl, apiKey, modelName) { reply ->
-                        testing = false
-                        testResult = reply.ifBlank { "连接失败：请检查 API 地址 / Key / 模型名" }
-                    }
-                },
-                onCancel = onBack
-            )
         }
     }
-
-    if (testResult != null) {
-        AlertDialog(
-            onDismissRequest = { testResult = null },
-            title = { Text("测试结果") },
-            text = {
-                if (testing) {
-                    Text("正在测试连接...")
-                } else {
-                    Text(
-                        testResult ?: "",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFE8E8F0)
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { testResult = null }) { Text("确定", color = AccentPink) }
-            }
-        )
-    }
-}
 
 /** 跳转菜单行：标题 + 副标题 + 右侧箭头，点击展开子配置 */
 @Composable
@@ -502,78 +458,6 @@ private fun PurpleSwitch(
             uncheckedBorderColor = Color.Transparent
         )
     )
-}
-
-/** 底部操作区：保存 / 测试（圆形边框）+ 取消（宽幅圆角矩形） */
-@Composable
-private fun BottomActionBar(
-    onSave: () -> Unit,
-    onTest: () -> Unit,
-    onCancel: () -> Unit
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF181A20))
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            RoundedBorderButton(
-                text = "保存",
-                onClick = onSave,
-                modifier = Modifier.weight(1f)
-            )
-            RoundedBorderButton(
-                text = "测试",
-                onClick = onTest,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(14.dp))
-                .background(LightPinkBg)
-                .clickable(onClick = onCancel)
-                .padding(vertical = 13.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                "取消",
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
-                color = DeepPurpleText
-            )
-        }
-    }
-}
-
-/** 圆形边框按钮（粉色文字/边框，贴合参考图） */
-@Composable
-private fun RoundedBorderButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(24.dp))
-            .border(1.5.dp, AccentPink, RoundedCornerShape(24.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 11.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Medium,
-            color = AccentPink
-        )
-    }
 }
 
 /** 创建桌面快捷方式（支持时返回 true） */
