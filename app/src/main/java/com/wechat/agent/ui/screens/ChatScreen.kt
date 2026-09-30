@@ -372,7 +372,7 @@ fun ChatScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(start = 56.dp, end = 12.dp),
-                        contentAlignment = Alignment.CenterHorizontally
+                        contentAlignment = Alignment.Center
                     ) {
                         ThinkingBubble(
                             reasoning = streamingReasoning,
@@ -554,7 +554,7 @@ fun MessageBubble(
                             .fillMaxWidth()
                             .widthIn(max = 280.dp)
                             .then(if (bodyWidthPx > 0) Modifier.width(with(density) { bodyWidthPx.toDp() }) else Modifier),
-                        contentAlignment = Alignment.CenterHorizontally
+                        contentAlignment = Alignment.Center
                     ) {
                         ThinkingBubble(reasoning = message.thinking.orEmpty(), autoCollapsed = autoCollapseThinking, isDark = isDark)
                     }

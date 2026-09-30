@@ -327,8 +327,8 @@ class SettingsManager private constructor(private val context: Context) {
     private fun loadProfiles(): List<AgentProfile> {
         val json = profilePrefs.getString("profiles", null) ?: return emptyList()
         return try {
-            gson.fromJson(json, object : TypeToken<List<AgentProfile>>() {}.type)
-                .map { it.copy(customPrompt = it.customPrompt.orEmpty()) }
+            val profiles: List<AgentProfile> = gson.fromJson(json, object : TypeToken<List<AgentProfile>>() {}.type)
+            profiles.map { it.copy(customPrompt = it.customPrompt.orEmpty()) }
         } catch (_: Exception) { emptyList() }
     }
 
