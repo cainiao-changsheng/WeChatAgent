@@ -57,6 +57,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     )
     private val momentsGenerator = MomentsGenerator(memoryManager)
     private val decisionEngine = LifeDecisionEngine(memoryManager)
+    private val emojiManager = EmojiManager(application)
     private val gson = Gson()
 
     // 各角色独立的数据文件（默认角色使用旧文件兼容历史数据）
@@ -927,11 +928,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** 读取本地图片 Uri 并压缩为 Base64 Data URL（宽高上限 1024、JPEG 80%），供识图请求使用。 */
     private fun readImageAsBase64(uriString: String): String? {
         return try {
+            // 本地绝对路径：直接按文件解码
+            var bitmap: android.graphics.Bitmap
             val resolver = getApplication<Application>().contentResolver
             val uri = android.net.Uri.parse(uriString)
-            val stream = resolver.openInputStream(uri) ?: return null
-            val bitmap = android.graphics.BitmapFactory.decodeStream(stream)
-            stream.close()
+            if (uriString.startsWith("/")) {
+                bitmap = android.graphics.BitmapFactory.decodeFile(uriString) ?: return null
+            } else if (uriString.startsWith("file://")) {
+                val filePath = uri.path ?: return null
+                bitmap = android.graphics.BitmapFactory.decodeFile(filePath) ?: return null
+            } else {
+                val stream = resolver.openInputStream(uri) ?: return null
+                bitmap = android.graphics.BitmapFactory.decodeStream(stream)
+                stream.close()
+            }
+            if (bitmap.width <= 0 || bitmap.height <= 0) return null
             val maxDim = 1024
             val scale = minOf(1f, maxDim.toFloat() / maxOf(bitmap.width, bitmap.height))
             val scaled = if (scale < 1f) {
