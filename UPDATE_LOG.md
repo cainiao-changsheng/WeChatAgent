@@ -104,6 +104,16 @@
 | 2 | 新增模拟思考文本生成器 | `generateThinkingPreview(userContent)` 依据用户消息生成 4 种口吻的自然思考文本（"对方说「xxx」，我得想想怎么回应才自然……"），随机选用，让思考气泡始终有内容 |
 | 3 | 文档：同步更新本日志 | 记录思考气泡兜底逻辑 |
 
+## v1.0.10（2026-09-30）输入框避让输入法 + 思考气泡常驻
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 修复：聊天输入框被输入法遮挡看不到输入内容 | `ChatScreen` 的 `bottomBar` 外层 `Column` 增加 `Modifier.imePadding()`，配合 Manifest 的 `adjustResize`，输入框与按钮组合整体浮在输入法键盘上方，输入时可实时看到已输入文字 |
+| 2 | 新增：思考过程气泡常驻显示 | `Message` 模型新增 `thinking` 字段；`ChatViewModel` 在流式结束后保存 `_streamingReasoning` 到 `finalThinking` 并随 `deliverMultiMessage`/`finishStreaming` 写入 agent 消息；`MessageBubble` 对含思考的 agent 消息在正文上方渲染常驻 `ThinkingBubble`（受「思考完成自动折叠气泡」开关控制），回复完成后思考内容不再消失 |
+| 3 | 优化：模拟思考更快出现减少等待卡顿感 | `simulateJob` 延迟由 1.2s 缩短为 0.6s，发送后更快出现「思考过程」气泡，正文流式未到前界面有明确反馈；同时保持正文到达无 reasoning 时立即补预览 |
+| 4 | 兼容：旧存档安全加载 | `MessageBubble` 读取 `thinking` 使用 `orEmpty()` 防御旧数据反序列化缺失字段，历史会话不崩溃 |
+| 5 | 文档：同步更新本日志 | 记录输入框避让与思考常驻改动 |
+
 ## 构建与发布说明
 
 - 分支：`master`，JDK 21 / Gradle 8.11.1，GitHub Actions 构建 debug APK（artifact：WeChatAgent-APK）。

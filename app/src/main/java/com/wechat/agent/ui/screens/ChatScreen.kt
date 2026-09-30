@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -193,7 +194,9 @@ fun ChatScreen(
         },
 
         bottomBar = {
-            Column {
+            Column(
+                modifier = Modifier.imePadding()
+            ) {
                 if (nowPlaying.title.isNotEmpty()) {
                     MusicControlBar(
                         nowPlaying = nowPlaying,
@@ -261,7 +264,8 @@ fun ChatScreen(
             items(messages, key = { it.id }) { message ->
                 MessageBubble(message = message, isDark = isDark,
                     agentAvatar = agentAvatar, userAvatar = userAvatar,
-                    agentAvatarUri = agentAvatarUri, userAvatarUri = userAvatarUri)
+                    agentAvatarUri = agentAvatarUri, userAvatarUri = userAvatarUri,
+                    autoCollapseThinking = advSettings.autoCollapseThinking)
             }
             if (advSettings.thinkDisplay && streamingReasoning.isNotEmpty()) {
                 item {
@@ -360,7 +364,8 @@ fun MessageBubble(
     agentAvatar: String = "🤖",
     userAvatar: String = "👤",
     agentAvatarUri: String = "",
-    userAvatarUri: String = ""
+    userAvatarUri: String = "",
+    autoCollapseThinking: Boolean = false
 ) {
     val isUser = message.role == Role.USER
     val bubbleColor = when {
@@ -408,6 +413,10 @@ fun MessageBubble(
                                 bottomStart = 16.dp, bottomEnd = 16.dp))
                     )
                     Spacer(modifier = Modifier.height(2.dp))
+                }
+                if (!isUser && message.thinking.orEmpty().isNotEmpty()) {
+                    ThinkingBubble(reasoning = message.thinking.orEmpty(), autoCollapsed = autoCollapseThinking, isDark = isDark)
+                    Spacer(modifier = Modifier.height(4.dp))
                 }
                 if (message.content.isNotEmpty()) {
                     Box(

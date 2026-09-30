@@ -494,7 +494,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val streamFlow = repository.sendMessageStream(model, apiKey, chatMessages)
                 val simulateJob = if (settingsManager.getAdvancedSettingsSync().thinkDisplay) {
                     viewModelScope.launch {
-                        delay(1200)
+                        delay(600)
                         if (_isLoading.value && _streamingReasoning.value.isEmpty() && _streamingContent.value.isEmpty()) {
                             _streamingReasoning.value = generateThinkingPreview(content)
                         }
@@ -528,9 +528,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         .replace(Regex("""\([^)]+\)"""), "")
                         .trim()
 
+                    val finalThinking = _streamingReasoning.value
                     _streamingContent.value = ""
                     _streamingReasoning.value = ""
-                    deliverMultiMessage(cleaned, chatId)
+                    deliverMultiMessage(cleaned, chatId, finalThinking)
 
                     memoryManager.addMemory(MemoryEntry(
                         id = UUID.randomUUID().toString(), type = MemoryType.L0_INSTANT,
@@ -579,11 +580,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun deliverMultiMessage(text: String, chatId: String) {
+    private fun deliverMultiMessage(text: String, chatId: String, thinking: String = "") {
         val splitEnabled = settingsManager.getAdvancedSettingsSync().splitMessages
         val parts = if (splitEnabled) typingTracker.splitIntoMessages(text) else listOf(text)
         if (parts.size <= 1) {
-            finishStreaming(text, chatId, MessageStatus.SENT)
+            finishStreaming(text, chatId, MessageStatus.SENT, thinking)
             return
         }
 
@@ -597,7 +598,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     if (i > 0) delay(delays[i])
                     val msg = parts[i].trim()
                     if (msg.isEmpty()) continue
-                    val agentMsg = Message(content = msg, role = Role.AGENT, status = MessageStatus.SENT)
+                    val agentMsg = Message(content = msg, role = Role.AGENT, status = MessageStatus.SENT, thinking = thinking)
                     _currentMessages.value = _currentMessages.value + agentMsg
                     syncChatInList(chatId, msg, _currentMessages.value)
                 }
@@ -992,8 +993,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         saveChatsToStorage()
     }
 
-    private fun finishStreaming(content: String, chatId: String, status: MessageStatus) {
-        val agentMessage = Message(content = content, role = Role.AGENT, status = status)
+    private fun finishStreaming(content: String, chatId: String, status: MessageStatus, thinking: String = "") {
+        val agentMessage = Message(content = content, role = Role.AGENT, status = status, thinking = thinking)
         _currentMessages.value = _currentMessages.value + agentMessage
         _streamingContent.value = ""
         _streamingReasoning.value = ""
@@ -1075,7 +1076,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 var fullReply = ""
                 val simulateJob = if (settingsManager.getAdvancedSettingsSync().thinkDisplay) {
                     viewModelScope.launch {
-                        delay(1200)
+                        delay(600)
                         if (_isLoading.value && _streamingReasoning.value.isEmpty() && _streamingContent.value.isEmpty()) {
                             _streamingReasoning.value = generateThinkingPreview("你发来一张图片")
                         }
@@ -1109,9 +1110,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         .replace(Regex("""\([^)]+\)"""), "")
                         .trim()
 
+                    val finalThinking = _streamingReasoning.value
                     _streamingContent.value = ""
                     _streamingReasoning.value = ""
-                    deliverMultiMessage(cleaned, chatId)
+                    deliverMultiMessage(cleaned, chatId, finalThinking)
 
                     memoryManager.addMemory(MemoryEntry(
                         id = UUID.randomUUID().toString(), type = MemoryType.L0_INSTANT,
