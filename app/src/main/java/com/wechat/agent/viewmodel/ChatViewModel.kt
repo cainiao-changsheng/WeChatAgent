@@ -733,7 +733,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     "对方在你动态下评论。"
                 }
                 val prompt = "$contextHint 对方回复: \"${userComment.take(60)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
-                    "请以$author的身份，回一条简短自然的回复（15字以内），像真人回复评论一样自然，可以就此打住，不要引号和任何符号前缀。直接输出。"
+                    "请以${author}的身份，回一条简短自然的回复（15字以内），像真人回复评论一样自然，可以就此打住，不要引号和任何符号前缀。直接输出。"
                 val result = if (post.imageUri.isNotBlank()) {
                     // 动态带图：若模型支持识图则结合图片内容回复，失败降级本地兜底
                     val imageDataUrl = readImageAsBase64(post.imageUri)
@@ -820,7 +820,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val model = settingsManager.modelName.first()
             if (apiKey.isNotEmpty()) {
                 val prompt = "你正在看对方发的朋友圈。对方动态内容: \"${post.content.take(80)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
-                    "请以$author的身份，回一条简短自然的评论（15字以内），像真人发朋友圈评论一样，不要引号和任何符号前缀。直接输出。"
+                    "请以${author}的身份，回一条简短自然的评论（15字以内），像真人发朋友圈评论一样，不要引号和任何符号前缀。直接输出。"
                 val result = if (post.imageUri.isNotBlank()) {
                     // 动态带图：优先用多模态识图，结合图片内容回复；模型不支持时降级为纯文本
                     val imageDataUrl = readImageAsBase64(post.imageUri)

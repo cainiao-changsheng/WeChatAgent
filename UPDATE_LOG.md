@@ -54,6 +54,13 @@
 | 3 | 兜底默认名“AI伴侣”改为中性“我” | `MomentPost.author`、`MomentsGenerator.generateMomentPost`、`AgentSetupScreen` 空名兜底、`MomentsScreen.agentName` 默认值由“AI伴侣”改为“我”；保留 `SettingsManager.DEFAULT_AGENT_NAME` 与 `MomentsScreen` 旧数据兼容判断（author 为空或旧值“AI伴侣”时回退当前昵称） |
 | 4 | 文档：同步更新本日志 | 记录本次按角色承载身份改动 |
 
+## v1.0.5（2026-09-30）固定APK签名支持覆盖安装
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 修复：每次构建APK签名不同导致无法覆盖安装 | 根因：debug 包默认使用 GitHub Actions runner 机器随机生成的 debug keystore 签名，每次构建签名不一致，系统判定为不同应用。解决：用 openssl 生成固定 PKCS12 签名文件 `app/debug.p12`（alias=androiddebugkey，密码 android）提交仓库；`app/build.gradle.kts` 的 signingConfigs 修改内置 debug 签名指向该文件，debug buildType 显式绑定。此后每次构建均使用同一密钥签名，可覆盖安装（后续升级发布需保留此 keystore 不变） |
+| 2 | 说明：Android 无法“去掉签名验证” | 系统强制所有 APK 必须有签名才能安装，不存在无签名安装；固定签名密钥是唯一正解。若未来上架应用商店，需另行生成正式 release keystore 并妥善保管 |
+
 ## 构建与发布说明
 
 - 分支：`master`，JDK 21 / Gradle 8.11.1，GitHub Actions 构建 debug APK（artifact：WeChatAgent-APK）。
