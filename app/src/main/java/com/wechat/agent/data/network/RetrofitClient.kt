@@ -40,7 +40,7 @@ object RetrofitClient {
         val parsed = trimmed.toHttpUrlOrNull()
             ?: throw IllegalArgumentException("API 地址无效")
         require(parsed.scheme == "https" || parsed.scheme == "http") { "API 地址必须使用 HTTP 或 HTTPS" }
-        require(parsed.userInfo == null) { "API 地址不能包含用户名或密码" }
+        require(parsed.username.isEmpty() && parsed.password.isEmpty()) { "API 地址不能包含用户名或密码" }
         require(parsed.query == null && parsed.fragment == null) { "API 地址不能包含查询参数或片段" }
         if (parsed.scheme == "http") {
             require(BuildConfig.DEBUG && isLocalHost(parsed.host)) {
