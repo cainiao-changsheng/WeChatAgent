@@ -16,6 +16,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.wechat.agent.data.AutoBackupConfig
 import com.wechat.agent.ui.components.WeChatBottomBar
+import com.wechat.agent.ui.screens.AdvancedScreen
 import com.wechat.agent.ui.screens.AgentDetailScreen
 import com.wechat.agent.ui.screens.AgentSetupScreen
 import com.wechat.agent.ui.screens.ChangelogScreen

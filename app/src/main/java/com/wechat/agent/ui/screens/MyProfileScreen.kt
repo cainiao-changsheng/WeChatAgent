@@ -58,6 +58,7 @@ fun MyProfileScreen(
     onEditProfile: () -> Unit,
     onOpenMoments: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenAdvanced: () -> Unit,
     bottomBar: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current

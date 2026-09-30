@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wechat.agent.data.AgentProfile
+import com.wechat.agent.data.AdvancedSettings
 import com.wechat.agent.data.AutoBackupConfig
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.network.ChatMessage

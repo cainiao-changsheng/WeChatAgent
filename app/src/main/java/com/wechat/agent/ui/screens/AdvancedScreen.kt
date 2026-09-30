@@ -41,6 +41,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -109,6 +110,7 @@ fun AdvancedScreen(
     var testResult by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
     LaunchedEffect(initial) {
@@ -228,9 +230,9 @@ fun AdvancedScreen(
                         val ok = runCatching { addShortcut(context) }.getOrDefault(false)
                         if (ok) {
                             customIcon = true
-                            snackbarHostState.showSnackbar("已添加自定义桌面图标")
+                            scope.launch { snackbarHostState.showSnackbar("已添加自定义桌面图标") }
                         } else {
-                            snackbarHostState.showSnackbar("当前环境不支持创建桌面快捷方式")
+                            scope.launch { snackbarHostState.showSnackbar("当前环境不支持创建桌面快捷方式") }
                         }
                     }
                 )
@@ -308,7 +310,7 @@ fun AdvancedScreen(
                             splitMessages = splitMessages
                         )
                     )
-                    snackbarHostState.showSnackbar("高级设置已保存")
+                    scope.launch { snackbarHostState.showSnackbar("高级设置已保存") }
                     onBack()
                 },
                 onTest = {
