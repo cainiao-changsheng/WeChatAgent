@@ -758,7 +758,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
                     fallbacks[Random.nextInt(fallbacks.size)]
                 }
-                val cleaned = behavior.trim().ifBlank { "保持安静" }
+                val cleaned = behavior?.trim()?.ifBlank { "保持安静" } ?: "保持安静"
                 val entry = ObservationEntry(
                     id = UUID.randomUUID().toString(),
                     agentId = agentId,
