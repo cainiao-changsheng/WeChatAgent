@@ -100,6 +100,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /** 大模型思考/回复的最长等待时间；高级设置"停用超时"开启时不设限。 */
     private val REPLY_TIMEOUT_MS = 600_000L
+    /** "发现"页自动生成观察记录的最短间隔：30 分钟，避免频繁切换页面生成重复内容。 */
+    private val MIN_OBSERVATION_INTERVAL_MS = 30 * 60 * 1000L
 
     private val _emotionState = MutableStateFlow(EmotionState())
     val emotionState = _emotionState.asStateFlow()
@@ -703,7 +705,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     if (i > 0) delay(delays[i])
                     val msg = parts[i].trim()
                     if (msg.isEmpty()) continue
-                    val agentMsg = Message(content = msg, role = Role.AGENT, status = MessageStatus.SENT, thinking = thinking)
+                    // 思考气泡只挂载在第一条分段消息上，避免多段拆分后重复显示同一段思考过程
+                    val agentMsg = Message(
+                        content = msg,
+                        role = Role.AGENT,
+                        status = MessageStatus.SENT,
+                        thinking = if (i == 0) thinking else ""
+                    )
                     _currentMessages.value = _currentMessages.value + agentMsg
                     syncChatInList(chatId, msg, _currentMessages.value)
                 }
@@ -809,9 +817,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * "发现"页：以"全知全能的观察者"视角生成一条好友客观行为记录。
      * 大模型只记录客观行为，不记录心理活动和想法；未配置 API Key 时使用本地兜底描述。
+     * force=false（页面自动触发）时受最短间隔限制，避免频繁切换页面生成重复记录；
+     * force=true（用户手动点击记录按钮）时始终生成。
      */
-    fun recordObservation(agentId: String, agentName: String) {
+    fun recordObservation(agentId: String, agentName: String, force: Boolean = false) {
         if (agentId.isBlank() || _generatingObservation.value) return
+        if (!force) {
+            val lastTime = observationStore.getObservations(agentId).firstOrNull()?.timestamp ?: 0L
+            if (System.currentTimeMillis() - lastTime < MIN_OBSERVATION_INTERVAL_MS) {
+                _observations.value = observationStore.getObservations(agentId)
+                return
+            }
+        }
         viewModelScope.launch {
             _generatingObservation.value = true
             try {

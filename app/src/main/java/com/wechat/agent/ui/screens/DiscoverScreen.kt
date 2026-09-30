@@ -60,6 +60,7 @@ fun DiscoverScreen(
     generating: Boolean = false,
     onRefresh: (String) -> Unit,
     onRecord: (String, String) -> Unit,
+    onAutoRecord: (String, String) -> Unit = { _, _ -> },
     bottomBar: @Composable () -> Unit = {}
 ) {
     var selectedAgentId by remember { mutableStateOf("") }
@@ -73,9 +74,12 @@ fun DiscoverScreen(
     }
     val selectedProfile = profiles.firstOrNull { it.id == selectedAgentId }
 
-    // 切换好友时加载该好友的观察记录
+    // 切换好友时加载该好友的观察记录，并自动生成一条（受 ViewModel 最短间隔限制，避免重复）
     LaunchedEffect(selectedAgentId) {
-        if (selectedAgentId.isNotBlank()) onRefresh(selectedAgentId)
+        if (selectedAgentId.isNotBlank()) {
+            onRefresh(selectedAgentId)
+            selectedProfile?.let { onAutoRecord(it.id, it.name) }
+        }
     }
 
     val timeFormat = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }

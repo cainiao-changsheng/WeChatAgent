@@ -282,7 +282,8 @@ fun AppNavigation() {
                 observations = observations,
                 generating = generatingObservation,
                 onRefresh = { agentId -> chatViewModel.loadObservations(agentId) },
-                onRecord = { agentId, agentName -> chatViewModel.recordObservation(agentId, agentName) },
+                onRecord = { agentId, agentName -> chatViewModel.recordObservation(agentId, agentName, force = true) },
+                onAutoRecord = { agentId, agentName -> chatViewModel.recordObservation(agentId, agentName, force = false) },
                 bottomBar = {
                     WeChatBottomBar(
                         currentRoute = currentRoute,

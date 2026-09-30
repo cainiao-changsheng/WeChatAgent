@@ -70,6 +70,15 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.17",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "修复：开启「多行文本自动分割」后不再重复出现多段思考气泡",
+                        "修复：恢复固定签名，后续更新无需卸载重装即可覆盖安装",
+                        "优化：「发现」页切到页面即自动生成一次观察记录，并限制最短间隔 30 分钟避免重复"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.16",
                     date = "2026-09-30",
                     items = listOf(
