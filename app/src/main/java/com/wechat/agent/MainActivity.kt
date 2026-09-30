@@ -98,6 +98,7 @@ fun AppNavigation() {
     val agentAge by settingsViewModel.agentAge.collectAsState()
     val agentPersona by settingsViewModel.agentPersona.collectAsState()
     val agentGlobalSettings by settingsViewModel.agentGlobalSettings.collectAsState()
+    val agentCustomPrompt by settingsViewModel.agentCustomPrompt.collectAsState()
     val nowPlaying by chatViewModel.nowPlaying.collectAsState()
     val momentPosts by chatViewModel.momentsPosts.collectAsState()
     val observations by chatViewModel.observations.collectAsState()
@@ -151,13 +152,14 @@ fun AppNavigation() {
                 initialAge = agentAge,
                 initialPersona = agentPersona,
                 initialGlobalSettings = agentGlobalSettings,
+                initialCustomPrompt = agentCustomPrompt,
                 initialAvatar = agentAvatar,
                 initialAvatarUri = agentAvatarUri,
                 onBack = { navController.popBackStack() },
                 onRandomGenerate = { chatViewModel.randomGenerateAgentProfile() },
-                onSave = { name, gender, age, persona, global, avatar, avatarUri ->
+                onSave = { name, gender, age, persona, global, customPrompt, avatar, avatarUri ->
                     // 新增角色：追加到角色列表，不覆盖默认角色，并自动切换为新角色
-                    settingsViewModel.addAgentProfile(name, gender, age, persona, global, avatar, avatarUri)
+                    settingsViewModel.addAgentProfile(name, gender, age, persona, global, customPrompt, avatar, avatarUri)
                     navController.popBackStack()
                 }
             )
@@ -171,12 +173,13 @@ fun AppNavigation() {
                 initialAge = agentAge,
                 initialPersona = agentPersona,
                 initialGlobalSettings = agentGlobalSettings,
+                initialCustomPrompt = agentCustomPrompt,
                 initialAvatar = agentAvatar,
                 initialAvatarUri = agentAvatarUri,
                 onBack = { navController.popBackStack() },
                 onRandomGenerate = { chatViewModel.randomGenerateAgentProfile() },
-                onSave = { name, gender, age, persona, global, avatar, avatarUri ->
-                    settingsViewModel.updateCurrentAgentProfile(name, gender, age, persona, global, avatar, avatarUri)
+                onSave = { name, gender, age, persona, global, customPrompt, avatar, avatarUri ->
+                    settingsViewModel.updateCurrentAgentProfile(name, gender, age, persona, global, customPrompt, avatar, avatarUri)
                     navController.popBackStack()
                 }
             )

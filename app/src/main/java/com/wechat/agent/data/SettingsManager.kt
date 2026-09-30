@@ -32,6 +32,7 @@ data class AgentProfile(
     val age: String = "18",
     val persona: String = "",
     val globalSettings: String = "",
+    val customPrompt: String = "",
     val avatar: String = "🤖",
     val avatarUri: String = ""
 )
@@ -151,14 +152,15 @@ class SettingsManager private constructor(private val context: Context) {
 
     fun addAgentProfile(
         name: String, gender: String, age: String, persona: String,
-        globalSettings: String, avatar: String = DEFAULT_AGENT_AVATAR, avatarUri: String = ""
+        globalSettings: String, customPrompt: String = "",
+        avatar: String = DEFAULT_AGENT_AVATAR, avatarUri: String = ""
     ): String {
         val id = UUID.randomUUID().toString()
         val profile = AgentProfile(
             id = id, name = name.ifBlank { DEFAULT_AGENT_NAME },
             gender = gender.ifBlank { DEFAULT_AGENT_GENDER },
             age = age.ifBlank { DEFAULT_AGENT_AGE },
-            persona = persona, globalSettings = globalSettings,
+            persona = persona, globalSettings = globalSettings, customPrompt = customPrompt,
             avatar = avatar.ifBlank { DEFAULT_AGENT_AVATAR }, avatarUri = avatarUri
         )
         val updated = (_agentProfiles.value + profile).distinctBy { it.id }
@@ -326,6 +328,7 @@ class SettingsManager private constructor(private val context: Context) {
         val json = profilePrefs.getString("profiles", null) ?: return emptyList()
         return try {
             gson.fromJson(json, object : TypeToken<List<AgentProfile>>() {}.type)
+                .map { it.copy(customPrompt = it.customPrompt.orEmpty()) }
         } catch (_: Exception) { emptyList() }
     }
 

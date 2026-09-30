@@ -80,6 +80,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -365,7 +367,13 @@ fun ChatScreen(
             }
             if (advSettings.thinkDisplay && streamingReasoning.isNotEmpty()) {
                 item {
-                    Box(modifier = Modifier.padding(horizontal = 10.dp)) {
+                    // 流式思考气泡：与正文气泡相同的起点偏移（头像 36dp + 间距 8dp），水平中点对齐正文区域
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 56.dp, end = 12.dp),
+                        contentAlignment = Alignment.CenterHorizontally
+                    ) {
                         ThinkingBubble(
                             reasoning = streamingReasoning,
                             autoCollapsed = advSettings.autoCollapseThinking,
@@ -447,14 +455,15 @@ fun ChatScreen(
 private fun ThinkingBubble(
     reasoning: String,
     autoCollapsed: Boolean,
-    isDark: Boolean
+    isDark: Boolean,
+    modifier: Modifier = Modifier
 ) {
     var collapsed by remember { mutableStateOf(autoCollapsed) }
     val bubbleBg = if (isDark) Color(0xFF262A35) else Color(0xFFF0F1F5)
     val titleColor = if (isDark) Color(0xFFC6C9D4) else Color(0xFF8A8FA3)
     val bodyColor = if (isDark) Color(0xFFE8E8F0) else Color(0xFF3A3F4B)
     Column(
-        modifier = Modifier
+        modifier = modifier
             .widthIn(max = 252.dp)
             .padding(vertical = 3.dp)
             .clip(RoundedCornerShape(12.dp))
@@ -507,16 +516,15 @@ fun MessageBubble(
     val parsed = if (isUser) null else remember(message.content, stickerList) {
         parseStickerContent(message.content, stickerList)
     }
+    // 记录正文气泡实际宽度（像素），用于思考气泡水平中点与正文气泡中点对齐
+    var bodyWidthPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
 
     AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically(initialOffsetY = { it / 8 })) {
-        // AI 消息的思考气泡独立显示在正文气泡上方，不与头像水平对齐，宽度为正文最大宽度的 90%
+        // AI 消息：思考气泡与正文气泡上下排列，二者水平中点对齐（思考气泡整体位于头像右侧的正文区域上方）
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
         ) {
-            if (!isUser && message.thinking.orEmpty().isNotEmpty()) {
-                ThinkingBubble(reasoning = message.thinking.orEmpty(), autoCollapsed = autoCollapseThinking, isDark = isDark)
-                Spacer(modifier = Modifier.height(4.dp))
-            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
@@ -540,6 +548,18 @@ fun MessageBubble(
 
             Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
                 modifier = Modifier.widthIn(max = 280.dp)) {
+                if (!isUser && message.thinking.orEmpty().isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 280.dp)
+                            .then(if (bodyWidthPx > 0) Modifier.width(with(density) { bodyWidthPx.toDp() }) else Modifier),
+                        contentAlignment = Alignment.CenterHorizontally
+                    ) {
+                        ThinkingBubble(reasoning = message.thinking.orEmpty(), autoCollapsed = autoCollapseThinking, isDark = isDark)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
                 if (message.imageUri.isNotEmpty()) {
                     val imageData: Any = if (message.imageUri.startsWith("/")) File(message.imageUri) else Uri.parse(message.imageUri)
                     AsyncImage(
@@ -571,7 +591,11 @@ fun MessageBubble(
                 }
                 if ((if (isUser) message.content else parsed?.text ?: message.content).isNotEmpty()) {
                     Box(
-                        modifier = Modifier.clip(RoundedCornerShape(
+                        modifier = Modifier
+                            .onGloballyPositioned { coordinates ->
+                                if (coordinates.size.width > 0) bodyWidthPx = coordinates.size.width
+                            }
+                            .clip(RoundedCornerShape(
                             topStart = if (isUser) 16.dp else 4.dp, topEnd = if (isUser) 4.dp else 16.dp,
                             bottomStart = 16.dp, bottomEnd = 16.dp))
                             .background(bubbleColor).padding(horizontal = 12.dp, vertical = 8.dp)

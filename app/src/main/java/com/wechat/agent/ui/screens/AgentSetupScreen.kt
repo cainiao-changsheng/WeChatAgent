@@ -62,13 +62,14 @@ fun AgentSetupScreen(
     initialAge: String,
     initialPersona: String,
     initialGlobalSettings: String,
+    initialCustomPrompt: String,
     initialAvatar: String,
     initialAvatarUri: String,
     isEdit: Boolean,
     onRandomGenerate: suspend () -> RandomAgentProfile?,
     onSave: (
         name: String, gender: String, age: String, persona: String,
-        globalSettings: String, avatar: String, avatarUri: String
+        globalSettings: String, customPrompt: String, avatar: String, avatarUri: String
     ) -> Unit,
     onBack: () -> Unit
 ) {
@@ -77,6 +78,7 @@ fun AgentSetupScreen(
     var age by remember { mutableStateOf(initialAge) }
     var persona by remember { mutableStateOf(initialPersona) }
     var globalSettings by remember { mutableStateOf(initialGlobalSettings) }
+    var customPrompt by remember { mutableStateOf(initialCustomPrompt) }
     var avatar by remember { mutableStateOf(initialAvatar) }
     var avatarUri by remember { mutableStateOf(initialAvatarUri) }
     var generating by remember { mutableStateOf(false) }
@@ -100,7 +102,7 @@ fun AgentSetupScreen(
     fun doSave() {
         val finalName = name.trim().ifEmpty { "我" }
         onSave(finalName, gender.trim().ifEmpty { "女" }, age.trim().ifEmpty { "18" },
-            persona, globalSettings, avatar, avatarUri)
+            persona, globalSettings, customPrompt, avatar, avatarUri)
     }
 
     Scaffold(
@@ -210,6 +212,16 @@ fun AgentSetupScreen(
                 label = { Text("性格特点") },
                 placeholder = { Text("可留空。例如：TA 喜欢清晨发动态、晚上陪你聊天") },
                 modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6,
+                shape = RoundedCornerShape(8.dp)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedTextField(
+                value = customPrompt, onValueChange = { customPrompt = it },
+                label = { Text("大模型提示词") },
+                placeholder = { Text("可留空。用于给大模型添加约束条件和人物一致性审查，例如：始终以角色身份回复、不得脱离设定") },
+                modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 8,
                 shape = RoundedCornerShape(8.dp)
             )
 

@@ -476,6 +476,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (profile.globalSettings.isNotBlank()) {
                 appendLine("全局设定：${profile.globalSettings}")
             }
+            if (profile.customPrompt.isNotBlank()) {
+                appendLine()
+                appendLine("【约束条件与人物一致性审查】")
+                appendLine("${profile.customPrompt}")
+            }
             val stickerCount = emojiManager.getAllStickers().size
             if (stickerCount > 0) {
                 appendLine()

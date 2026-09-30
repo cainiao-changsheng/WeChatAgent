@@ -70,6 +70,16 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.21",
+                    date = "2026-10-01",
+                    items = listOf(
+                        "新增：编辑 AI 好友页新增「大模型提示词」输入框",
+                        "可填写约束条件与人物一致性审查要求，保存后注入大模型 Prompt 生效",
+                        "优化：聊天页思考气泡右移并与正文气泡中点对齐",
+                        "思考气泡与正文气泡垂直居中、左右对齐，流式思考气泡同步校准"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.20",
                     date = "2026-09-30",
                     items = listOf(

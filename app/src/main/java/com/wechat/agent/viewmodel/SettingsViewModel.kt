@@ -69,6 +69,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val agentGlobalSettings: StateFlow<String> = currentAgentProfile
         .map { it?.globalSettings.orEmpty() }
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
+    val agentCustomPrompt: StateFlow<String> = currentAgentProfile
+        .map { it?.customPrompt.orEmpty() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "")
     val agentAvatar: StateFlow<String> = currentAgentProfile
         .map { it?.avatar ?: SettingsManager.DEFAULT_AGENT_AVATAR }
         .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_AGENT_AVATAR)
@@ -168,10 +171,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     /** 新增 AI 角色：追加到角色列表（不覆盖默认角色），并自动切换为新角色。返回新角色 id。 */
     fun addAgentProfile(
         name: String, gender: String, age: String, persona: String,
-        globalSettings: String, avatar: String = SettingsManager.DEFAULT_AGENT_AVATAR,
+        globalSettings: String, customPrompt: String = "",
+        avatar: String = SettingsManager.DEFAULT_AGENT_AVATAR,
         avatarUri: String = ""
     ): String {
-        val id = settingsManager.addAgentProfile(name, gender, age, persona, globalSettings, avatar, avatarUri)
+        val id = settingsManager.addAgentProfile(name, gender, age, persona, globalSettings, customPrompt, avatar, avatarUri)
         settingsManager.setCurrentAgentId(id)
         _saveSuccess.value = true
         return id
@@ -180,7 +184,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     /** 编辑当前角色档案。 */
     fun updateCurrentAgentProfile(
         name: String, gender: String, age: String, persona: String, globalSettings: String,
-        avatar: String, avatarUri: String
+        customPrompt: String, avatar: String, avatarUri: String
     ) {
         val current = currentAgentProfile.value ?: return
         settingsManager.updateAgentProfile(
@@ -190,6 +194,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 age = age.ifBlank { SettingsManager.DEFAULT_AGENT_AGE },
                 persona = persona,
                 globalSettings = globalSettings,
+                customPrompt = customPrompt,
                 avatar = avatar.ifBlank { SettingsManager.DEFAULT_AGENT_AVATAR },
                 avatarUri = avatarUri
             )

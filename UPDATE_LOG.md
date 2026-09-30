@@ -1,3 +1,19 @@
+## 1.0.21 需求集（2026-10-01 追加）
+
+### 编辑 AI 好友页新增「大模型提示词」输入框
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 新增「大模型提示词」输入框，用于给大模型添加约束条件和人物一致性审查 | `AgentProfile` 新增 `val customPrompt: String = ""`；`AgentSetupScreen` 在「性格特点」后新增 `label="大模型提示词"` 的 `OutlinedTextField`，placeholder 说明约束与一致性审查；`MainActivity` 两处 `AgentSetupScreen` 传 `initialCustomPrompt` 与 `onSave` 扩展参数 |
+| 2 | 提示词保存并注入大模型 Prompt | `SettingsManager` / `SettingsViewModel` 持久化 `customPrompt`；`ChatViewModel.buildPersonaPrompt` 在全局设定后追加 `customPrompt`（`isNotBlank` 才注入），旧数据 Gson 兜底 `orEmpty` |
+
+### 聊天页思考气泡右移与中点对齐
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 3 | 思考气泡整体右移，并与正文气泡中点对中点垂直对齐 | `ThinkingBubble` 加 `modifier` 参数；非流式思考气泡移入头像右侧正文 `Column` 内，用 `onGloballyPositioned` 测正文气泡宽度使思考容器等宽居中（`fillMaxWidth` + `widthIn(max=280.dp)` + 测宽后 `Modifier.width(bodyWidthPx.toDp())`） |
+| 4 | 流式思考气泡同步校准 | 流式思考气泡 `Box` `padding(start=56.dp, end=12.dp)` 居中；`ChatScreen.kt` 新增 `import onGloballyPositioned`、`LocalDensity` |
+
 ## 1.0.20 需求集（暂缓发版，2026-09-30 追加）
 
 ### 热恋模式主动消息增强
