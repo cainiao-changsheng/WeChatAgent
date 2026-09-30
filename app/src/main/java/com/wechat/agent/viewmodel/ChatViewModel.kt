@@ -746,7 +746,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         appendLine("3. 控制在 80 字以内。")
                     }
                     runCatching {
-                        repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                        repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt))).getOrNull()
                     }.getOrDefault("")
                 } else {
                     val fallbacks = listOf(
