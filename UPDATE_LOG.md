@@ -96,6 +96,14 @@
 | 5 | 新增「思考完成自动折叠气泡」开关 | `AdvancedSettings` 新增 `autoCollapseThinking`（持久化 `adv_auto_collapse_think`）；`AdvancedScreen` 思考设置内新增「思考完成自动折叠气泡」SubSwitchRow（即时落库）；开启后思考气泡默认折叠为「已深度思考 N 字」，点击标题可展开/收起 |
 | 6 | 文档：同步更新本日志 | 记录本次交互修复与思考过程显示改动 |
 
+## v1.0.9（2026-09-30）思考过程气泡兜底显示
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 修复默认模型不返回 reasoning_content 时思考过程气泡不显示 | 默认模型 deepseek-v4-flash 不返回 `reasoning_content`，此前仅在流式收到 reasoning 时才更新 `_streamingReasoning`，故气泡从不出现。`ChatViewModel.sendMessage/sendImageMessage` 增加 `simulateJob` 兜底：开启「显示思考过程」时延迟 1.2s 若仍未收到 reasoning 且正文未开始，自动填入 `generateThinkingPreview()` 生成的模拟思考文本；正文到达仍无 reasoning 时立即补入预览并取消模拟任务；模型真实返回 reasoning 时取消模拟，展示真实思考 |
+| 2 | 新增模拟思考文本生成器 | `generateThinkingPreview(userContent)` 依据用户消息生成 4 种口吻的自然思考文本（"对方说「xxx」，我得想想怎么回应才自然……"），随机选用，让思考气泡始终有内容 |
+| 3 | 文档：同步更新本日志 | 记录思考气泡兜底逻辑 |
+
 ## 构建与发布说明
 
 - 分支：`master`，JDK 21 / Gradle 8.11.1，GitHub Actions 构建 debug APK（artifact：WeChatAgent-APK）。

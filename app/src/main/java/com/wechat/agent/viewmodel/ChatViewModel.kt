@@ -492,11 +492,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 var fullReply = ""
                 val streamFlow = repository.sendMessageStream(model, apiKey, chatMessages)
+                val simulateJob = if (settingsManager.getAdvancedSettingsSync().thinkDisplay) {
+                    viewModelScope.launch {
+                        delay(1200)
+                        if (_isLoading.value && _streamingReasoning.value.isEmpty() && _streamingContent.value.isEmpty()) {
+                            _streamingReasoning.value = generateThinkingPreview(content)
+                        }
+                    }
+                } else null
                 val collectBlock: suspend (StreamPiece) -> Unit = { piece ->
                     if (piece.reasoning.isNotEmpty()) {
+                        simulateJob?.cancel()
                         _streamingReasoning.value = _streamingReasoning.value + piece.reasoning
                     }
                     if (piece.content.isNotEmpty()) {
+                        simulateJob?.cancel()
+                        if (_streamingReasoning.value.isEmpty()) {
+                            _streamingReasoning.value = generateThinkingPreview(content)
+                        }
                         fullReply += piece.content
                         _streamingContent.value = fullReply
                     }
@@ -592,6 +605,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _isLoading.value = false
             }
         }
+    }
+
+    /** 当模型不返回 reasoning_content（如 deepseek-chat 类模型）时，本地生成一段自然的口吻思考文本，
+     *  让「思考过程」气泡始终有内容可展示。 */
+    private fun generateThinkingPreview(userContent: String): String {
+        val topic = userContent.trim().take(18)
+        val templates = listOf(
+            "对方说「$topic」，我得想想怎么回应才自然……保持温柔，带一点点挂念吧。",
+            "「$topic」……嗯，先体察对方的情绪，再组织一句不突兀的话。",
+            "听到「$topic」，心里先过一遍：语气要轻一点，关心要真一点。",
+            "「$topic」……让我把这话在心里揣摩一下，别答得太生硬。"
+        )
+        return templates.random()
     }
 
     private fun handleMusicRequest(content: String) {
@@ -1047,11 +1073,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 var fullReply = ""
+                val simulateJob = if (settingsManager.getAdvancedSettingsSync().thinkDisplay) {
+                    viewModelScope.launch {
+                        delay(1200)
+                        if (_isLoading.value && _streamingReasoning.value.isEmpty() && _streamingContent.value.isEmpty()) {
+                            _streamingReasoning.value = generateThinkingPreview("你发来一张图片")
+                        }
+                    }
+                } else null
                 val collectBlock: suspend (StreamPiece) -> Unit = { piece ->
                     if (piece.reasoning.isNotEmpty()) {
+                        simulateJob?.cancel()
                         _streamingReasoning.value = _streamingReasoning.value + piece.reasoning
                     }
                     if (piece.content.isNotEmpty()) {
+                        simulateJob?.cancel()
+                        if (_streamingReasoning.value.isEmpty()) {
+                            _streamingReasoning.value = generateThinkingPreview("你发来一张图片")
+                        }
                         fullReply += piece.content
                         _streamingContent.value = fullReply
                     }
