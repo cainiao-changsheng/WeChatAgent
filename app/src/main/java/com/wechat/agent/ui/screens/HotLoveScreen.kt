@@ -1,10 +1,12 @@
 package com.wechat.agent.ui.screens
 
 import android.app.AppOpsManager
+import android.app.NotificationManager
 import android.app.usage.UsageStatsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Process
 import android.provider.Settings
 import androidx.compose.foundation.clickable
@@ -421,8 +423,12 @@ private fun hasUsageAccess(context: Context): Boolean {
 
 private fun hasNotificationAccess(context: Context): Boolean {
     return try {
-        val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        nm.isNotificationListenerAccessGranted(ComponentName(context, NotificationListener::class.java))
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            nm.isNotificationListenerAccessGranted(ComponentName(context, NotificationListener::class.java))
+        } else {
+            false
+        }
     } catch (_: Exception) {
         false
     }
