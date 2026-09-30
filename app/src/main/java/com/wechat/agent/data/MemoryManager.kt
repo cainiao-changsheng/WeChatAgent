@@ -152,6 +152,41 @@ class MemoryManager(context: Context) {
         sb.toString().take(maxTokens)
     }
 
+    /**
+     * 按关键词精确搜索记忆库（L0 即时 / L1 当天 / L2 长期），只返回命中的条目。
+     * 用于替代每次全量注入记忆上下文：模型带关键词查询，速度快且上下文更小。
+     * keywords 为空时退化为精简锚点（最近少量核心记忆），避免模型完全失忆。
+     */
+    suspend fun searchMemory(keywords: String, maxResults: Int = 8): String {
+        val query = keywords.trim()
+        val kw = query.split(Regex("[，,、;；\\s]+")).filter { it.isNotBlank() }.map { it.lowercase() }
+        if (kw.isEmpty()) {
+            // 无关键词：退化为精简锚点（最近少量核心记忆），避免模型完全失忆
+            return buildMemoryContext(maxTokens = 400)
+        }
+        return mutex.withLock {
+            val all = buildList {
+                addAll(loadMemory(MemoryType.L2_GROWTH))
+                addAll(loadMemory(MemoryType.L1_DAILY))
+                addAll(loadMemory(MemoryType.L0_INSTANT))
+            }
+            val matched = all
+                .filter { e ->
+                    val c = e.content.lowercase()
+                    kw.any { c.contains(it) || (c.length >= 2 && it.contains(c.take(2))) }
+                }
+                .sortedByDescending { it.timestamp }
+                .take(maxResults)
+            if (matched.isEmpty()) {
+                return@withLock "未找到与关键词「$query」相关的记忆记录。"
+            }
+            val sb = StringBuilder()
+            sb.appendLine("【与「$query」相关的记忆】")
+            matched.forEach { sb.appendLine("- ${it.content}") }
+            sb.toString()
+        }
+    }
+
     suspend fun saveEmotion(state: EmotionState) = mutex.withLock {
         val json = gson.toJson(state)
         prefs.edit().putString("emotion_state", json).apply()

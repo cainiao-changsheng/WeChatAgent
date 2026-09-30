@@ -55,7 +55,15 @@ data class HotLoveSettings(
     /** 当前间隔是否由大模型决定（用户手动修改后置 false，避免 AI 覆盖用户自定义值）。 */
     val proactiveIntervalFromAi: Boolean = false,
     /** 用户是否手动设置过间隔（置 true 后 AI 不再自动覆盖，除非值仍为默认 30）。 */
-    val proactiveIntervalUserSet: Boolean = false
+    val proactiveIntervalUserSet: Boolean = false,
+    /** 主动发消息时间窗下限 x（分钟）：收到用户上条消息后至少等 x 分钟，AI 才可能主动发消息。默认 5。 */
+    val proactiveWindowMinMinutes: Int = 5,
+    /** 主动发消息时间窗上限 y（分钟）：收到用户上条消息后 y 分钟内 AI 自行决定是否主动发；超过窗口不再打扰。默认 20。 */
+    val proactiveWindowMaxMinutes: Int = 20,
+    /** 时间窗当前是否由大模型决定（用户手动修改后置 false，避免 AI 覆盖用户自定义值）。 */
+    val proactiveWindowFromAi: Boolean = false,
+    /** 用户是否手动设置过时间窗（置 true 后 AI 不再自动覆盖；点击「恢复 AI 设定」后置 false）。 */
+    val proactiveWindowUserSet: Boolean = false
 )
 
 /** 高级设置（我 → 高级 页），对应参考图"思考设置"各功能项。 */
@@ -229,13 +237,34 @@ class SettingsManager private constructor(private val context: Context) {
             .putInt("hotlove_proactive_interval_minutes", settings.proactiveIntervalMinutes.coerceIn(5, 1440))
             .putBoolean("hotlove_proactive_interval_from_ai", settings.proactiveIntervalFromAi)
             .putBoolean("hotlove_proactive_interval_user_set", settings.proactiveIntervalUserSet)
+            .putInt("hotlove_proactive_window_min", settings.proactiveWindowMinMinutes.coerceIn(1, 1440))
+            .putInt("hotlove_proactive_window_max", settings.proactiveWindowMaxMinutes.coerceIn(1, 1440))
+            .putBoolean("hotlove_proactive_window_from_ai", settings.proactiveWindowFromAi)
+            .putBoolean("hotlove_proactive_window_user_set", settings.proactiveWindowUserSet)
             .apply()
+        val windowMin = settings.proactiveWindowMinMinutes.coerceIn(1, 1440)
+        val windowMax = settings.proactiveWindowMaxMinutes.coerceIn(1, 1440)
         _hotLoveSettings.value = settings.copy(
-            proactiveIntervalMinutes = settings.proactiveIntervalMinutes.coerceIn(5, 1440)
+            proactiveIntervalMinutes = settings.proactiveIntervalMinutes.coerceIn(5, 1440),
+            proactiveWindowMinMinutes = minOf(windowMin, windowMax),
+            proactiveWindowMaxMinutes = maxOf(windowMin, windowMax)
         )
     }
 
     fun getHotLoveSettingsSync(): HotLoveSettings = _hotLoveSettings.value
+
+    /** 恢复 AI 设定的主动发消息时间窗：重置为内置 AI 默认值（5-20 分钟）并标记由 AI 设定。 */
+    fun restoreProactiveWindowFromAi() {
+        val s = getHotLoveSettingsSync()
+        saveHotLoveSettings(
+            s.copy(
+                proactiveWindowMinMinutes = 5,
+                proactiveWindowMaxMinutes = 20,
+                proactiveWindowFromAi = true,
+                proactiveWindowUserSet = false
+            )
+        )
+    }
 
     private fun loadHotLoveSettings(): HotLoveSettings {
         return HotLoveSettings(
@@ -245,7 +274,11 @@ class SettingsManager private constructor(private val context: Context) {
             proactiveMessages = profilePrefs.getBoolean("hotlove_proactive_messages", false),
             proactiveIntervalMinutes = profilePrefs.getInt("hotlove_proactive_interval_minutes", 30).coerceIn(5, 1440),
             proactiveIntervalFromAi = profilePrefs.getBoolean("hotlove_proactive_interval_from_ai", false),
-            proactiveIntervalUserSet = profilePrefs.getBoolean("hotlove_proactive_interval_user_set", false)
+            proactiveIntervalUserSet = profilePrefs.getBoolean("hotlove_proactive_interval_user_set", false),
+            proactiveWindowMinMinutes = profilePrefs.getInt("hotlove_proactive_window_min", 5).coerceIn(1, 1440),
+            proactiveWindowMaxMinutes = profilePrefs.getInt("hotlove_proactive_window_max", 20).coerceIn(1, 1440),
+            proactiveWindowFromAi = profilePrefs.getBoolean("hotlove_proactive_window_from_ai", false),
+            proactiveWindowUserSet = profilePrefs.getBoolean("hotlove_proactive_window_user_set", false)
         )
     }
 

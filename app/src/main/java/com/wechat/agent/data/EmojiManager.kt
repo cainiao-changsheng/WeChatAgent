@@ -90,6 +90,22 @@ class EmojiManager(context: Context) {
     }
 
     /**
+     * 按语义关键词模糊搜索表情（名称/快捷名包含任一关键词即命中）。
+     * 供大模型 search_sticker 工具调用：返回少量候选，避免全量注入表情清单。
+     */
+    fun searchStickers(keywords: String, maxResults: Int = 6): List<EmojiSticker> {
+        val kw = keywords.trim().lowercase()
+            .split(Regex("[，,、;；\\s]+"))
+            .filter { it.isNotBlank() }
+        if (kw.isEmpty()) return emptyList()
+        return loadStickers().filter { s ->
+            val name = s.name.lowercase()
+            val shortcut = s.shortcut.lowercase()
+            kw.any { name.contains(it) || (shortcut.isNotEmpty() && shortcut.contains(it)) }
+        }.take(maxResults)
+    }
+
+    /**
      * 导出当前表情包为 zip（参考格式）：custom_stickers.json + 各表情图片。
      * json 每项为 { description, fileName }，fileName 与 zip 内图片文件名一致。
      */

@@ -365,11 +365,13 @@ fun ChatScreen(
             }
             if (advSettings.thinkDisplay && streamingReasoning.isNotEmpty()) {
                 item {
-                    ThinkingBubble(
-                        reasoning = streamingReasoning,
-                        autoCollapsed = advSettings.autoCollapseThinking,
-                        isDark = isDark
-                    )
+                    Box(modifier = Modifier.padding(horizontal = 10.dp)) {
+                        ThinkingBubble(
+                            reasoning = streamingReasoning,
+                            autoCollapsed = advSettings.autoCollapseThinking,
+                            isDark = isDark
+                        )
+                    }
                 }
             }
             if (streamingContent.isNotEmpty()) {
@@ -439,7 +441,8 @@ fun ChatScreen(
 }
 
 /** 流式期间的"思考过程"气泡：深色圆角卡片，标题行可点击展开/折叠。
- *  autoCollapsed 为 true（高级设置"思考完成自动折叠气泡"开启）时默认折叠为一行摘要。 */
+ *  autoCollapsed 为 true（高级设置"思考完成自动折叠气泡"开启）时默认折叠为一行摘要。
+ *  宽度固定为正文气泡最大宽度（280dp）的 90%（252dp），独立显示在正文气泡上方。 */
 @Composable
 private fun ThinkingBubble(
     reasoning: String,
@@ -452,8 +455,8 @@ private fun ThinkingBubble(
     val bodyColor = if (isDark) Color(0xFFE8E8F0) else Color(0xFF3A3F4B)
     Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 3.dp)
+            .widthIn(max = 252.dp)
+            .padding(vertical = 3.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(bubbleBg)
             .clickable { collapsed = !collapsed }
@@ -506,10 +509,18 @@ fun MessageBubble(
     }
 
     AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically(initialOffsetY = { it / 8 })) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+        // AI 消息的思考气泡独立显示在正文气泡上方，不与头像水平对齐，宽度为正文最大宽度的 90%
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
         ) {
+            if (!isUser && message.thinking.orEmpty().isNotEmpty()) {
+                ThinkingBubble(reasoning = message.thinking.orEmpty(), autoCollapsed = autoCollapseThinking, isDark = isDark)
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+            ) {
             if (!isUser) {
                 Box(
                     modifier = Modifier.size(36.dp).clip(CircleShape).background(WeChatGreen),
@@ -542,10 +553,6 @@ fun MessageBubble(
                                 bottomStart = 16.dp, bottomEnd = 16.dp))
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                }
-                if (!isUser && message.thinking.orEmpty().isNotEmpty()) {
-                    ThinkingBubble(reasoning = message.thinking.orEmpty(), autoCollapsed = autoCollapseThinking, isDark = isDark)
-                    Spacer(modifier = Modifier.height(4.dp))
                 }
                 if (!isUser && parsed != null && parsed.images.isNotEmpty()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -601,6 +608,7 @@ fun MessageBubble(
                         Text(userAvatar, fontSize = MaterialTheme.typography.bodySmall.fontSize)
                     }
                 }
+            }
             }
         }
     }
@@ -923,7 +931,6 @@ fun MusicControlBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surface)
-            .clickable(onClick = onOpenApp)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -934,7 +941,13 @@ fun MusicControlBar(
             modifier = Modifier.size(18.dp)
         )
         Spacer(modifier = Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
+        // 仅歌曲信息区域可点击打开音乐 App，避免与播放控制按钮的事件竞争
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onOpenApp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 text = nowPlaying.title.ifEmpty { "未知歌曲" },
                 style = MaterialTheme.typography.bodySmall,

@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -264,7 +265,8 @@ fun HotLoveScreen(
                     )
                 }
                 if (settings.proactiveMessages) {
-                    // 主动发消息间隔：大模型按角色自定一次，用户可手动修改（修改后 AI 不再覆盖）
+                    // 主动发消息时间窗：收到用户上条消息后 x-y 分钟内，AI 自行判断是否主动发消息。
+                    // 默认由大模型按角色自定，用户可手动修改，也可一键恢复 AI 设定。
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -281,45 +283,92 @@ fun HotLoveScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "主动发消息间隔",
+                                "主动发消息时间窗",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Medium
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 when {
-                                    settings.proactiveIntervalFromAi -> "由大模型按角色自定，可手动修改"
-                                    settings.proactiveIntervalUserSet -> "手动设置（大模型不再自动覆盖）"
-                                    else -> "大模型将在下次主动消息前自定间隔，可手动修改"
+                                    settings.proactiveWindowFromAi -> "由大模型按角色自定，可手动修改"
+                                    settings.proactiveWindowUserSet -> "手动设置（大模型不再自动覆盖）"
+                                    else -> "大模型将在下次主动消息前自定时间窗，可手动修改"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                             )
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IntervalStepButton("-", enabled = settings.proactiveIntervalMinutes > 5) {
-                                viewModel.saveHotLoveSettings(
-                                    settings.copy(
-                                        proactiveIntervalMinutes = (settings.proactiveIntervalMinutes - 5).coerceAtLeast(5),
-                                        proactiveIntervalFromAi = false,
-                                        proactiveIntervalUserSet = true
-                                    )
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("最早", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.width(40.dp))
+                        IntervalStepButton("-", enabled = settings.proactiveWindowMinMinutes > 1) {
+                            viewModel.saveHotLoveSettings(
+                                settings.copy(
+                                    proactiveWindowMinMinutes = (settings.proactiveWindowMinMinutes - 1).coerceAtLeast(1),
+                                    proactiveWindowFromAi = false,
+                                    proactiveWindowUserSet = true
                                 )
-                            }
-                            Text(
-                                "${settings.proactiveIntervalMinutes} 分钟",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(horizontal = 10.dp)
                             )
-                            IntervalStepButton("+", enabled = settings.proactiveIntervalMinutes < 1440) {
-                                viewModel.saveHotLoveSettings(
-                                    settings.copy(
-                                        proactiveIntervalMinutes = (settings.proactiveIntervalMinutes + 5).coerceAtMost(1440),
-                                        proactiveIntervalFromAi = false,
-                                        proactiveIntervalUserSet = true
-                                    )
+                        }
+                        Text(
+                            "${settings.proactiveWindowMinMinutes} 分钟",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        )
+                        IntervalStepButton("+", enabled = settings.proactiveWindowMinMinutes < settings.proactiveWindowMaxMinutes - 1) {
+                            viewModel.saveHotLoveSettings(
+                                settings.copy(
+                                    proactiveWindowMinMinutes = (settings.proactiveWindowMinMinutes + 1).coerceAtMost(settings.proactiveWindowMaxMinutes - 1),
+                                    proactiveWindowFromAi = false,
+                                    proactiveWindowUserSet = true
                                 )
-                            }
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("最晚", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.width(40.dp))
+                        IntervalStepButton("-", enabled = settings.proactiveWindowMaxMinutes > settings.proactiveWindowMinMinutes + 1) {
+                            viewModel.saveHotLoveSettings(
+                                settings.copy(
+                                    proactiveWindowMaxMinutes = (settings.proactiveWindowMaxMinutes - 1).coerceAtLeast(settings.proactiveWindowMinMinutes + 1),
+                                    proactiveWindowFromAi = false,
+                                    proactiveWindowUserSet = true
+                                )
+                            )
+                        }
+                        Text(
+                            "${settings.proactiveWindowMaxMinutes} 分钟",
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        )
+                        IntervalStepButton("+", enabled = settings.proactiveWindowMaxMinutes < 1440) {
+                            viewModel.saveHotLoveSettings(
+                                settings.copy(
+                                    proactiveWindowMaxMinutes = (settings.proactiveWindowMaxMinutes + 1).coerceAtMost(1440),
+                                    proactiveWindowFromAi = false,
+                                    proactiveWindowUserSet = true
+                                )
+                            )
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        TextButton(onClick = { viewModel.restoreProactiveWindowFromAi() }) {
+                            Text("恢复 AI 设定", style = MaterialTheme.typography.bodySmall,
+                                color = WeChatGreen)
                         }
                     }
                 }

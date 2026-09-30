@@ -1,3 +1,41 @@
+## 1.0.20 需求集（暂缓发版，2026-09-30 追加）
+
+### 热恋模式主动消息增强
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 限制：正在聊天窗口内不主动发消息 | `ChatViewModel` 新增 `_isInChatScreen` + `setInChatScreen(inChat)`；离开窗口瞬间把 `hotlove_last_proactive_at` 重置为当前时间，保证"仅不在对话窗口时才计时"。`MainActivity` chat 路由用 `DisposableEffect` 在进入/退出聊天页时切换状态 |
+| 2 | 限制：`startProactiveLoop` 与 `sendProactiveContact` 双入口补窗口检查 | 在聊天窗口内直接 `continue`/`return`，且窗口内不累计间隔；用户在窗口内发消息仍走常规回复流程 |
+| 3 | 正文：主动消息结合已有聊天记录 | `sendProactiveContact` 的 prompt 注入最近 8 条聊天记录（`你/对方` 角色标注），并要求模型"结合最近聊天记录自然延续话题、不要只盯着屏幕使用时间" |
+
+### 播放器组件修复
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 4 | 修复：切歌/暂停后 UI 信息不刷新 | `MusicController` 的 `controllerCallback` 不再空实现，`onPlaybackStateChanged`/`onMetadataChanged` 触发时回调 `onNowPlayingChanged`；`ChatViewModel.init` 订阅该回调更新 `_nowPlaying`；四个控制方法操作后延迟 400ms 再主动 `refreshNowPlaying()` 兜底 |
+| 5 | 修复：暂停键需按住才生效 | `MusicControlBar` 移除整行 `Row.clickable(onOpenApp)`，改为仅歌曲信息 `Column` 区域可点击打开音乐 App，消除按钮与整行点击事件竞争 |
+| 6 | 修复：退出 App 后音乐继续播放 | `ChatViewModel.onCleared()` 在 `musicController.release()` 前先 `pause()`，Activity 销毁时自动暂停音乐 |
+
+### 主动消息时间窗改造
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 7 | 主动消息触发改为「收到用户上条消息后 x-y 分钟内 AI 自行判断是否主动发」 | `HotLoveSettings` 新增 `proactiveWindowMinMinutes/MaxMinutes`（默认 5-20）、`proactiveWindowFromAi/UserSet`；`startProactiveLoop` 改为以用户最后一条消息时间为锚点：`elapsed ∈ [min, max]` 且窗口内未主动发过才触发；超过窗口上限本次不再打扰，等用户下一条消息重新开启窗口；`setInChatScreen(false)` 时把 `hotlove_last_proactive_at` 归零以重置窗口标记 |
+| 8 | AI 自行判断是否发 + 用户自定义 + 恢复 AI 设定按钮 | `sendProactiveContact` 增加 `allowDecline`：prompt 允许模型输出「(暂不打扰)」标记时跳过插入消息（防重复标记仍由调用方维护）；`ensureProactiveWindowDecided` 向大模型询问「x y」两个分钟整数并按角色自定；`HotLoveScreen` 时间窗 UI 支持分别调整最早/最晚分钟数并一键「恢复 AI 设定」（重置 5-20 并标记由 AI 设定，`SettingsManager.restoreProactiveWindowFromAi`） |
+| 9 | 思考气泡独立显示在正文气泡上方 | `MessageBubble` 改为外层 `Column`：AI 消息的思考气泡（含历史消息与流式）移出头像 `Row`，独立渲染在正文气泡上方，不再与头像水平对齐；`ThinkingBubble` 宽度由 `fillMaxWidth` 改为 `widthIn(max = 252.dp)`（正文气泡最大 280dp 的 90%）；流式思考气泡独立 item 补 `padding(horizontal = 10.dp)` 保持间距 |
+
+### 新增 AI 好友随机生成
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 10 | 「新增 AI 好友」页新增随机生成按钮 | `AgentSetupScreen` 在「创建 AI 好友」按钮上方新增「随机生成（AI 自动设定）」`OutlinedButton`（编辑模式隐藏，生成中显示进度圈并禁用）；点击后由大模型一次性随机产出姓名/性别/年龄/人设描述/性格特点并回填表单，可继续手动调整；`ChatViewModel.randomGenerateAgentProfile()` 构造角色设计师提示词，请求模型输出 JSON 并用 Gson 解析（失败返回 null，不覆盖已有输入） |
+
+### 好友详情页记忆库查看
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 11 | 新增：记忆库卡片「查看记忆」按钮 | `AgentDetailScreen` 记忆库卡片新增「查看记忆」按钮，点击后异步读取 `getL0Memory/getL1Memory/getL2Memory` 三层记忆并按 L0 即时 / L1 日常 / L2 成长分组拼接文本，弹出可滚动 `AlertDialog` 展示（最大高度 420dp，`verticalScroll` 滚动查看），关闭即回收；`memoryDialogContent` state 控制弹窗显隐 |
+
 ## 1.0.19 Agent 模式阶段 1：工具调用能力（2026-09-30）
 
 | # | 更新内容 | 实现方法 |

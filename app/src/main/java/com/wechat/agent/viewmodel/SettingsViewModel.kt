@@ -86,6 +86,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         settingsManager.saveHotLoveSettings(settings)
     }
 
+    fun restoreProactiveWindowFromAi() {
+        settingsManager.restoreProactiveWindowFromAi()
+    }
+
     // ========== 高级设置（我 → 高级） ==========
 
     val advancedSettings: StateFlow<AdvancedSettings> = settingsManager.advancedSettings

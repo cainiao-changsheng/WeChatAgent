@@ -153,6 +153,7 @@ fun AppNavigation() {
                 initialAvatar = agentAvatar,
                 initialAvatarUri = agentAvatarUri,
                 onBack = { navController.popBackStack() },
+                onRandomGenerate = { chatViewModel.randomGenerateAgentProfile() },
                 onSave = { name, gender, age, persona, global, avatar, avatarUri ->
                     // 新增角色：追加到角色列表，不覆盖默认角色，并自动切换为新角色
                     settingsViewModel.addAgentProfile(name, gender, age, persona, global, avatar, avatarUri)
@@ -172,6 +173,7 @@ fun AppNavigation() {
                 initialAvatar = agentAvatar,
                 initialAvatarUri = agentAvatarUri,
                 onBack = { navController.popBackStack() },
+                onRandomGenerate = { chatViewModel.randomGenerateAgentProfile() },
                 onSave = { name, gender, age, persona, global, avatar, avatarUri ->
                     settingsViewModel.updateCurrentAgentProfile(name, gender, age, persona, global, avatar, avatarUri)
                     navController.popBackStack()
@@ -238,6 +240,11 @@ fun AppNavigation() {
             // （避免 agentDetail 异步 switchAgent 清空 _currentChatId 后打开空会话）
             LaunchedEffect(id) {
                 chatViewModel.selectChat(id)
+            }
+            // 进入聊天窗口标记：热恋主动消息在窗口内不打扰、离开后重新计时
+            DisposableEffect(id) {
+                chatViewModel.setInChatScreen(true)
+                onDispose { chatViewModel.setInChatScreen(false) }
             }
             val chat = chats.find { it.id == id }
             val chatAgent = chat?.agentId?.let { aid -> agentProfiles.find { it.id == aid } }

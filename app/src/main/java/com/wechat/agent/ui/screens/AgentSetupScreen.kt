@@ -26,8 +26,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -35,6 +37,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,8 +49,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.wechat.agent.data.model.RandomAgentProfile
 import com.wechat.agent.ui.components.CenteredTopBar
 import com.wechat.agent.ui.theme.WeChatGreen
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -60,6 +65,7 @@ fun AgentSetupScreen(
     initialAvatar: String,
     initialAvatarUri: String,
     isEdit: Boolean,
+    onRandomGenerate: suspend () -> RandomAgentProfile?,
     onSave: (
         name: String, gender: String, age: String, persona: String,
         globalSettings: String, avatar: String, avatarUri: String
@@ -73,6 +79,8 @@ fun AgentSetupScreen(
     var globalSettings by remember { mutableStateOf(initialGlobalSettings) }
     var avatar by remember { mutableStateOf(initialAvatar) }
     var avatarUri by remember { mutableStateOf(initialAvatarUri) }
+    var generating by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
     val galleryLauncher = rememberLauncherForActivityResult(
@@ -206,6 +214,47 @@ fun AgentSetupScreen(
             )
 
             Spacer(modifier = Modifier.height(20.dp))
+
+            OutlinedButton(
+                onClick = {
+                    if (generating) return@OutlinedButton
+                    scope.launch {
+                        generating = true
+                        try {
+                            val p = onRandomGenerate()
+                            if (p != null) {
+                                name = p.name
+                                gender = p.gender
+                                age = p.age
+                                persona = p.persona
+                                globalSettings = p.globalSettings
+                                avatar = ""
+                                avatarUri = ""
+                            }
+                        } finally {
+                            generating = false
+                        }
+                    }
+                },
+                enabled = !generating && !isEdit,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                if (generating) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("AI 正在生成…", fontWeight = FontWeight.Medium)
+                } else {
+                    Text("随机生成（AI 自动设定）", fontWeight = FontWeight.Medium)
+                }
+            }
+            if (!isEdit) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text("由 AI 随机生成姓名、性别、年龄、人设描述与性格特点，生成后可继续手动调整",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
 
             Button(
                 onClick = { doSave() },

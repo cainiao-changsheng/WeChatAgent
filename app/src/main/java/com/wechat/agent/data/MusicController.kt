@@ -24,9 +24,17 @@ class MusicController(private val context: Context) {
     private var mediaController: MediaController? = null
     private val sessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
 
+    /** 媒体会话状态/元数据变化时回调当前播放信息（供 UI 实时刷新，如切歌后更新歌名）。 */
+    var onNowPlayingChanged: ((NowPlaying) -> Unit)? = null
+
     private val controllerCallback = object : MediaController.Callback() {
-        override fun onPlaybackStateChanged(state: PlaybackState?) {}
-        override fun onMetadataChanged(metadata: android.media.MediaMetadata?) {}
+        override fun onPlaybackStateChanged(state: PlaybackState?) {
+            onNowPlayingChanged?.invoke(getNowPlaying())
+        }
+
+        override fun onMetadataChanged(metadata: android.media.MediaMetadata?) {
+            onNowPlayingChanged?.invoke(getNowPlaying())
+        }
     }
 
     fun connect(): Boolean {

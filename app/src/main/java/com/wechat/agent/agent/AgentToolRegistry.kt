@@ -32,7 +32,8 @@ object AgentToolRegistry {
     /** 阶段 1 只读工具清单（不依赖用户手机端写权限，安全风险低）。 */
     fun readOnlyTools(
         memoryManager: MemoryManager,
-        screenUsageProvider: suspend () -> String
+        screenUsageProvider: suspend () -> String,
+        stickerSearchProvider: suspend (String) -> String
     ): List<AgentToolSpec> = listOf(
         AgentToolSpec(
             name = "get_current_time",
@@ -73,14 +74,43 @@ object AgentToolRegistry {
         ),
         AgentToolSpec(
             name = "recall_memory",
-            description = "读取你与该角色的长期记忆库（含身份设定与相处记忆），用于在回复前回忆对方是谁、发生过什么事。",
+            description = "按关键词精确搜索你与该角色的长期记忆库（过去发生的事、约定、对方偏好等）。keywords 越具体命中越准；没有想好关键词时可传空，仅返回最近核心记忆。",
             parameters = mapOf(
                 "type" to "object",
-                "properties" to emptyMap<String, Any>(),
+                "properties" to mapOf(
+                    "keywords" to mapOf(
+                        "type" to "string",
+                        "description" to "要回忆的记忆关键词，如'喜欢吃辣'、'上次旅行'、'生日'。可多个，用空格分隔。"
+                    )
+                ),
                 "required" to emptyList<String>()
             ),
-            executor = { _ ->
-                memoryManager.buildMemoryContext().ifBlank { "暂无相关记忆记录。" }
+            executor = { args ->
+                val keywords = (args["keywords"] as? String)?.trim() ?: ""
+                memoryManager.searchMemory(keywords).ifBlank { "暂无相关记忆记录。" }
+            }
+        ),
+        AgentToolSpec(
+            name = "search_sticker",
+            description = "按语义关键词精确搜索对方自定义的图片表情，返回可用的表情名列表。聊天时想用表情（开心/生气/点赞/晚安等）就调用本工具，然后用 [表情名] 或 表情:表情名 的格式输出。",
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "keywords" to mapOf(
+                        "type" to "string",
+                        "description" to "描述你想要的表情的语义关键词，如'开心'、'生气'、'点赞'、'晚安'。可多个，用空格分隔。"
+                    )
+                ),
+                "required" to listOf("keywords")
+            ),
+            executor = { args ->
+                val keywords = (args["keywords"] as? String)?.trim() ?: ""
+                val result = stickerSearchProvider(keywords)
+                if (result.isBlank()) {
+                    "未找到匹配的表情，这次回复自然文本即可，不要编造表情名。"
+                } else {
+                    "找到可用表情：$result"
+                }
             }
         )
     )

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -90,6 +91,7 @@ fun AgentDetailScreen(
         MemoryManager(context.applicationContext).also { it.setActiveAgent(agentId) }
     }
     var confirmAction by remember { mutableStateOf<String?>(null) }
+    var memoryDialogContent by remember { mutableStateOf<String?>(null) }
     val dangerRed = Color(0xFFE64340)
     Scaffold(
         topBar = {
@@ -275,6 +277,29 @@ fun AgentDetailScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) { Text("导入记忆（自动识别 json / md）", fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface) }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                val l0 = memoryManager.getL0Memory()
+                                val l1 = memoryManager.getL1Memory()
+                                val l2 = memoryManager.getL2Memory()
+                                memoryDialogContent = buildString {
+                                    appendLine("【L0 即时记忆】${l0.size} 条")
+                                    l0.forEach { appendLine("· ${it.content}") }
+                                    appendLine()
+                                    appendLine("【L1 日常记忆】${l1.size} 条")
+                                    l1.forEach { appendLine("· ${it.content}") }
+                                    appendLine()
+                                    appendLine("【L2 成长记忆】${l2.size} 条")
+                                    l2.forEach { appendLine("· ${it.content}") }
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f))
+                    ) { Text("查看记忆", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onPrimary) }
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("导入会覆盖当前角色记忆，请谨慎操作", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
@@ -424,6 +449,25 @@ fun AgentDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { confirmAction = null }) { Text("取消") }
+            }
+        )
+    }
+
+    // ===== 查看记忆弹窗 =====
+    memoryDialogContent?.let { content ->
+        AlertDialog(
+            onDismissRequest = { memoryDialogContent = null },
+            title = { Text("记忆库", fontWeight = FontWeight.Bold) },
+            text = {
+                val scrollState = rememberScrollState()
+                Text(
+                    text = content,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(scrollState),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { memoryDialogContent = null }) { Text("关闭") }
             }
         )
     }

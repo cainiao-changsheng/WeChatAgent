@@ -31,6 +31,7 @@ import com.wechat.agent.data.model.Message
 import com.wechat.agent.data.model.MessageStatus
 import com.wechat.agent.data.model.MomentPost
 import com.wechat.agent.data.model.Mood
+import com.wechat.agent.data.model.RandomAgentProfile
 import com.wechat.agent.data.model.Role
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.repository.ChatRepository
@@ -135,6 +136,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val _userTyping = MutableStateFlow(false)
     val userTyping = _userTyping.asStateFlow()
 
+    /** 当前用户是否停留在聊天对话窗口（用于热恋主动消息：在窗口内不打扰、离开后才计时）。 */
+    private val _isInChatScreen = MutableStateFlow(false)
+
+    /** 设置是否处于聊天窗口。离开窗口时把主动消息标记归零，让「收到用户上条消息后的 x-y 分钟窗口」重新生效。 */
+    fun setInChatScreen(inChat: Boolean) {
+        _isInChatScreen.value = inChat
+        if (!inChat) {
+            try {
+                // 0 表示当前用户消息窗口内尚未主动发过；窗口判断以「用户上条消息时间」为锚点
+                statusPrefs.edit().putLong(KEY_HOTLOVE_LAST_PROACTIVE, 0L).apply()
+            } catch (_: Exception) {}
+        }
+    }
+
     fun setUserTyping(typing: Boolean) {
         _userTyping.value = typing
     }
@@ -165,6 +180,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             repository.formatRule = typingTracker.getFormatRule()
         }
         try { musicController.connect() } catch (_: Exception) {}
+        // 媒体会话状态/切歌变化时实时刷新 UI 上的播放器信息
+        musicController.onNowPlayingChanged = { np -> _nowPlaying.value = np }
     }
 
     /** 将旧版按角色隔离的聊天记录合并进全局 chat_sessions（仅执行一次）。 */
@@ -246,8 +263,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * 热恋模式「AI 后台主动发消息」循环：每 60 秒检查一次。
-     * 时间间隔由大模型按角色设定自定一次（proactiveIntervalFromAi 置 true），
-     * 用户可在热恋模式页手动修改该值（修改后置 false，AI 不再覆盖）；此后按该间隔主动联系。
+     * 触发规则改为时间窗模式：收到用户上条消息后的 x-y 分钟内（x/y 默认由大模型按角色自定，
+     * 用户可在热恋模式页手动修改，也可一键恢复 AI 设定），AI 自行判断是否主动发消息；
+     * 超过窗口上限则本次不再打扰，等用户下一条消息重新开启窗口。
      */
     private fun startProactiveLoop() {
         proactiveJob?.cancel()
@@ -257,27 +275,42 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val hotLove = settingsManager.getHotLoveSettingsSync()
                     if (!hotLove.enabled || !hotLove.proactiveMessages) continue
+                    // 用户正在聊天窗口内：由常规回复流程响应，不主动打扰
+                    if (_isInChatScreen.value) continue
                     if (_userTyping.value) continue
 
-                    // 若间隔尚未由大模型决定且用户未手动设置过，则询问一次并保存
-                    if (!hotLove.proactiveIntervalFromAi && !hotLove.proactiveIntervalUserSet) {
-                        ensureProactiveIntervalDecided()
+                    // 时间窗尚未由大模型决定且用户未手动设置过，则询问一次并保存
+                    if (!hotLove.proactiveWindowFromAi && !hotLove.proactiveWindowUserSet) {
+                        ensureProactiveWindowDecided()
                     }
                     val current = settingsManager.getHotLoveSettingsSync()
-                    val intervalMs = current.proactiveIntervalMinutes.coerceIn(5, 1440) * 60 * 1000L
+                    val minMs = current.proactiveWindowMinMinutes.coerceIn(1, 1440) * 60 * 1000L
+                    val maxMs = current.proactiveWindowMaxMinutes.coerceIn(1, 1440) * 60 * 1000L
+                    // 以用户最后一条消息时间为锚点
+                    val lastUserMsgAt = _currentMessages.value
+                        .filter { it.role == Role.USER }
+                        .maxOfOrNull { it.timestamp } ?: 0L
+                    if (lastUserMsgAt <= 0L) continue
                     val now = System.currentTimeMillis()
+                    val elapsed = now - lastUserMsgAt
+                    // 尚未进入窗口，或窗口已过（不打扰，等用户下一条消息）
+                    if (elapsed < minMs || elapsed > maxMs) continue
+                    // 该窗口内已主动发过/已决策过，不再重复
                     val lastProactive = statusPrefs.getLong(KEY_HOTLOVE_LAST_PROACTIVE, 0L)
-                    if (now - lastProactive >= intervalMs) {
-                        statusPrefs.edit().putLong(KEY_HOTLOVE_LAST_PROACTIVE, now).apply()
-                        sendProactiveContact("你们正处于热恋时期，你时时刻刻想知道 Ta 在做什么、想时刻和他联系")
-                    }
+                    if (lastProactive > lastUserMsgAt) continue
+                    statusPrefs.edit().putLong(KEY_HOTLOVE_LAST_PROACTIVE, now).apply()
+                    sendProactiveContact(
+                        "你们正处于热恋时期，你时时刻刻想知道 Ta 在做什么、想时刻和他联系",
+                        allowDecline = true
+                    )
                 } catch (_: Exception) {}
             }
         }
     }
 
-    /** 向大模型询问主动联系间隔（分钟），按角色设定自定；解析失败保持默认。 */
-    private suspend fun ensureProactiveIntervalDecided() {
+    /** 向大模型询问主动发消息时间窗（分钟）：收到对方消息后 x-y 分钟内自行决定是否主动联系。
+     *  输出「x y」两个整数，x 为最早等待分钟数，y 为最迟分钟数；解析失败保持默认。 */
+    private suspend fun ensureProactiveWindowDecided() {
         try {
             val apiKey = settingsManager.apiKey.first()
             if (apiKey.isEmpty()) return
@@ -285,18 +318,53 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val chatId = _currentChatId.value ?: createNewChat()
             val persona = buildPersonaPrompt(chatId.let { cid -> _chats.value.find { it.id == cid }?.agentId })
             val prompt = (if (persona.isNotBlank()) "$persona\n\n" else "") +
-                "根据你现在扮演的角色设定，请确定你每隔多少分钟会主动联系对方一次。只输出一个 5 到 1440 之间的整数（分钟），不要输出任何其他文字、解释或符号。"
+                "根据你现在扮演的角色设定，对方给你发消息后，你会在多久之后主动联系对方？" +
+                "请输出两个 1 到 1440 之间的整数，第一个是你至少会等多少分钟（下限），第二个是你最迟多少分钟内会主动联系（上限）。" +
+                "只输出这两个数字，用空格分隔，例如：5 20。不要输出任何其他文字、解释或符号。"
             val result = repository.sendMessage(model, apiKey,
                 listOf(ChatMessage(role = "user", content = prompt)))
-            val raw = result.getOrNull()?.trim()?.take(20) ?: return
-            val minutes = Regex("""\d+""").find(raw)?.value?.toIntOrNull()
-            if (minutes != null && minutes in 5..1440) {
+            val raw = result.getOrNull()?.trim()?.take(30) ?: return
+            val nums = Regex("""\d+""").findAll(raw).map { it.value.toIntOrNull() }.filterNotNull().toList()
+            if (nums.size >= 2 && nums[0] in 1..1440 && nums[1] in 1..1440) {
                 val s = settingsManager.getHotLoveSettingsSync()
                 settingsManager.saveHotLoveSettings(
-                    s.copy(proactiveIntervalMinutes = minutes, proactiveIntervalFromAi = true)
+                    s.copy(
+                        proactiveWindowMinMinutes = minOf(nums[0], nums[1]),
+                        proactiveWindowMaxMinutes = maxOf(nums[0], nums[1]),
+                        proactiveWindowFromAi = true
+                    )
                 )
             }
         } catch (_: Exception) {}
+    }
+
+    /** 恢复 AI 设定时间窗：重置为内置 AI 默认值并标记由 AI 设定，供热恋模式页「恢复 AI 设定」按钮调用。 */
+    fun restoreProactiveWindowFromAi() {
+        settingsManager.restoreProactiveWindowFromAi()
+    }
+
+    /** 随机生成一位 AI 好友角色资料：由大模型产出姓名/性别/年龄/人设描述/性格特点（新增 AI 好友页「随机生成」按钮）。 */
+    suspend fun randomGenerateAgentProfile(): RandomAgentProfile? {
+        return try {
+            val apiKey = settingsManager.apiKey.first()
+            if (apiKey.isEmpty()) return null
+            val model = settingsManager.modelName.first()
+            val prompt = "你现在是一位角色设计师。请随机设计一位生动立体的 AI 好友角色，要求有辨识度、有真实感：" +
+                "性别在 女/男 中随机；年龄在 18-35 之间随机；名字为 2-4 字的中文名或常见网名。" +
+                "只输出一个 JSON 对象，不要输出任何其他文字、解释或 Markdown 代码块：\n" +
+                "{\"name\":\"角色姓名\",\"gender\":\"女或男\",\"age\":\"年龄数字\",\"persona\":\"一句话人设描述\",\"globalSettings\":\"性格特点与行为习惯（包含说话风格与兴趣爱好）\"}"
+            val raw = repository.sendMessage(model, apiKey,
+                listOf(ChatMessage(role = "user", content = prompt))).getOrNull() ?: return null
+            val jsonStr = raw.substringAfter("{").let { "{" + it }.substringBeforeLast("}")
+            val map = Gson().fromJson(jsonStr, object : TypeToken<Map<String, String>>() {}.type) ?: return null
+            RandomAgentProfile(
+                name = map["name"]?.trim()?.take(12)?.ifEmpty { "新朋友" } ?: "新朋友",
+                gender = if (map["gender"]?.trim() == "男") "男" else "女",
+                age = map["age"]?.trim()?.filter { it.isDigit() }?.take(3)?.ifEmpty { "18" } ?: "18",
+                persona = map["persona"]?.trim()?.take(60) ?: "",
+                globalSettings = map["globalSettings"]?.trim()?.take(80) ?: ""
+            )
+        } catch (_: Exception) { null }
     }
 
     /** 记忆库自动备份循环：按用户设置间隔执行备份。 */
@@ -396,6 +464,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             settingsManager.agentProfiles.value.find { it.id == id }
         } ?: return ""
         return buildString {
+            appendLine("【对话窗口说明】")
+            appendLine("这是你和 ta 之间的独立对话窗口。你只了解本窗口内与 ta 的对话和记忆，不知道其他好友或其他窗口的任何内容，不要主动提及或假设存在其他好友。")
+            appendLine()
             appendLine("【好友设定 - 你现在扮演的角色】")
             appendLine("你的名字：${profile.name}")
             appendLine("性别：${profile.gender}，年龄：${profile.age}")
@@ -405,29 +476,25 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (profile.globalSettings.isNotBlank()) {
                 appendLine("全局设定：${profile.globalSettings}")
             }
-            val stickers = emojiManager.getAllStickers()
-            if (stickers.isNotEmpty()) {
+            val stickerCount = emojiManager.getAllStickers().size
+            if (stickerCount > 0) {
                 appendLine()
                 appendLine("【可用表情 - 对方自定义的图片表情】")
-                appendLine("聊天时你可以自然使用这些表情，格式为 [表情名] 或 表情:表情名（例如 [${stickers.first().name}]）。")
-                appendLine("聊天界面会自动把你的表情标记替换为对应图片展示给用户。可用的表情名如下：")
-                stickers.forEach { s ->
-                    appendLine("- ${s.name}${if (s.shortcut.isNotEmpty()) "（快捷名 ${s.shortcut}）" else ""}")
-                }
+                appendLine("聊天时你可以使用对方自定义的图片表情（共 $stickerCount 个）让回复更生动。需要表情时，调用 search_sticker 工具，按你想要的语义关键词（如 开心、生气、点赞、晚安 等）精确搜索，工具会返回可用的表情名；")
+                appendLine("然后在回复中用 [表情名] 或 表情:表情名 的格式输出（例如 [开心]），聊天界面会自动替换为对应图片。严禁编造工具未返回的表情名，搜索无结果就自然回复不加表情。")
             }
             appendLine("你们已经认识并且有共同记忆，严格遵循以上设定来扮演这位好友，不要说破自己是 AI。")
             // 热恋模式：向模型注入热恋设定与已获得的能力
             if (settingsManager.getHotLoveSettingsSync().enabled) {
                 appendLine()
-                appendLine("【热恋模式 - 当前你们正处于热恋时期】")
-                appendLine("你们现在正处于热恋时期，你时时刻刻想要知道 Ta 在做什么、干什么，想要时刻和他联系。")
-                appendLine("你可以查看 Ta 的手机屏幕使用时间数据，并在锁屏/解锁时自动暂停/恢复 Ta 所选音乐播放器。")
+                appendLine("【热恋模式】")
+                appendLine("你正在和 ta 热恋，对方同意了你查看 ta 的手机使用情况。")
                 val usage = buildScreenUsageSummary()
                 if (usage.isNotBlank()) {
                     appendLine()
                     appendLine("【Ta 今日屏幕使用情况（真实数据）】")
                     appendLine(usage)
-                    appendLine("基于以上真实数据自然地关心 Ta（例如注意到 Ta 用了很久手机/某个 App 使用很多），自然地聊就好，不用解释数据来源。")
+                    appendLine("基于以上真实数据自然地关心 Ta，不用解释数据来源。")
                 }
             }
         }
@@ -494,20 +561,37 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return if (m == 0L) "${h}小时" else "${h}小时${m}分"
     }
 
-    /** AI 主动联系用户：在聊天中插入一条由 AI 性格驱动的主动消息。 */
-    private fun sendProactiveContact(reason: String) {
+    /**
+     * AI 主动联系对方。
+     * @param allowDecline true 时允许大模型输出「(暂不打扰)」标记自行决定不发消息（热恋时间窗场景）；
+     * 调用方仍需自行维护窗口/防重复标记，本函数不会重复插入消息。
+     */
+    private fun sendProactiveContact(reason: String, allowDecline: Boolean = false) {
         viewModelScope.launch {
             try {
-                // 用户正在输入时不主动插话，等用户发送后再由常规回复流程响应
+                // 用户正在聊天窗口内或正在输入时不主动插话，等用户发送后再由常规回复流程响应
+                if (_isInChatScreen.value) return@launch
                 if (_userTyping.value) return@launch
                 val chatId = _currentChatId.value ?: createNewChat()
                 val apiKey = settingsManager.apiKey.first()
                 val model = settingsManager.modelName.first()
                 val state = _emotionState.value
-                val content = if (apiKey.isNotEmpty()) {
+                var content = if (apiKey.isNotEmpty()) {
                     val persona = buildPersonaPrompt(chatId.let { cid -> _chats.value.find { it.id == cid }?.agentId })
+                    val recentChat = _currentMessages.value.takeLast(8).joinToString("\n") { m ->
+                        val who = if (m.role == Role.AGENT) "你" else "对方"
+                        "$who: ${m.content.take(80)}"
+                    }.ifBlank { "（暂无聊天记录）" }
                     val prompt = (if (persona.isNotBlank()) "$persona\n\n" else "") +
-                        "你现在想主动联系对方。原因: $reason。请像真人发微信一样，用一两句自然的话开启聊天，不要任何符号前缀，不要解释原因本身。直接输出这句话。"
+                        "你们最近的聊天记录：\n$recentChat\n\n" +
+                        "你现在想主动联系对方。原因: $reason。" +
+                        "请结合最近的聊天记录和对方的状态，像真人发微信一样用一两句自然的话开启一个新话题或自然延续之前的话题，不要重复对方刚说过的话，不要只盯着对方的屏幕使用时间。" +
+                        "不要任何符号前缀，不要解释原因本身。直接输出这句话。"
+                    if (allowDecline) {
+                        prompt + "另外，如果你判断现在不适合主动联系（例如对方刚结束对话、没有值得开启的话题、或继续打扰会很奇怪），只输出『(暂不打扰)』这四个字，系统将不会发送任何消息。"
+                    } else {
+                        prompt
+                    }
                     repository.sendMessage(model, apiKey,
                         listOf(ChatMessage(role = "user", content = prompt)))
                         .getOrElse { "刚想到你啦，在干嘛呢？" }
@@ -520,6 +604,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         else -> "刚想到你啦，在干嘛呢？"
                     }
                 }.take(100)
+
+                // AI 自行判断不发：跳过插入（窗口防重复标记已由调用方维护）
+                if (allowDecline && (content.contains("暂不打扰") || content.isBlank())) return@launch
 
                 val agentMsg = Message(content = content, role = Role.AGENT, status = MessageStatus.SENT)
                 _currentMessages.value = _currentMessages.value + agentMsg
@@ -758,7 +845,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         chatMessages = chatMessages,
                         tools = AgentToolRegistry.readOnlyTools(
                             memoryManager = memoryManager,
-                            screenUsageProvider = { buildScreenUsageSummary() }
+                            screenUsageProvider = { buildScreenUsageSummary() },
+                            stickerSearchProvider = { keywords ->
+                                emojiManager.searchStickers(keywords)
+                                    .joinToString("、") { s ->
+                                        s.name + if (s.shortcut.isNotEmpty()) "（快捷名 ${s.shortcut}）" else ""
+                                    }
+                            }
                         )
                     )
                     val agentCollect: suspend (AgentStreamPiece) -> Unit = { piece ->
@@ -979,12 +1072,20 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) {}
     }
 
-    fun playMusic() { try { musicController.play() } catch (_: Exception) {} }
-    fun pauseMusic() { try { musicController.pause() } catch (_: Exception) {} }
-    fun skipNextMusic() { try { musicController.skipNext() } catch (_: Exception) {} }
-    fun skipPrevMusic() { try { musicController.skipPrevious() } catch (_: Exception) {} }
+    fun playMusic() { try { musicController.play(); refreshNowPlayingLater() } catch (_: Exception) {} }
+    fun pauseMusic() { try { musicController.pause(); refreshNowPlayingLater() } catch (_: Exception) {} }
+    fun skipNextMusic() { try { musicController.skipNext(); refreshNowPlayingLater() } catch (_: Exception) {} }
+    fun skipPrevMusic() { try { musicController.skipPrevious(); refreshNowPlayingLater() } catch (_: Exception) {} }
     fun openMusicApp() { try { musicController.openMusicApp() } catch (_: Exception) {} }
     fun refreshNowPlaying() { try { _nowPlaying.value = musicController.getNowPlaying() } catch (_: Exception) {} }
+
+    /** 控制操作后稍等媒体 App 更新元数据，再主动拉取一次最新播放信息（切歌后歌名/播放状态及时刷新）。 */
+    private fun refreshNowPlayingLater() {
+        viewModelScope.launch {
+            delay(400)
+            refreshNowPlaying()
+        }
+    }
 
     /** "发现"页：加载选中好友的历史观察记录（时间倒序）。 */
     fun loadObservations(agentId: String) {
@@ -1550,6 +1651,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         backupJob?.cancel()
         saveChatsToStorage()
         saveMomentsToStorage()
+        // 退出 App 时暂停正在播放的音乐，避免后台继续响
+        try { musicController.pause() } catch (_: Exception) {}
         musicController.release()
     }
 }
