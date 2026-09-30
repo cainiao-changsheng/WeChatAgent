@@ -303,6 +303,7 @@ fun AdvancedScreen(
             }
         }
     }
+}
 
 /** 跳转菜单行：标题 + 副标题 + 右侧箭头，点击展开子配置 */
 @Composable
