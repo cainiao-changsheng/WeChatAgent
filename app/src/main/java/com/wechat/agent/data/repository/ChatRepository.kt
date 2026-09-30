@@ -1,5 +1,6 @@
 package com.wechat.agent.data.repository
 
+import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.network.ChatRequest
@@ -88,11 +89,15 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                 val content = body?.choices?.firstOrNull()?.message?.content ?: ""
                 Result.success(content)
             } else {
-                val errorBody = response.errorBody()?.string() ?: ""
-                Result.failure(Exception("API 错误: $errorBody"))
+                val message = apiErrorMessage(response.code())
+                AppLogger.log("ChatRepository", "非成功 HTTP 响应: ${response.code()}")
+                Result.failure(Exception(message))
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Result.failure(e)
+            AppLogger.log("ChatRepository", "请求异常: ${e.javaClass.simpleName}")
+            Result.failure(Exception(networkErrorMessage(e), e))
         }
     }
 
@@ -126,11 +131,15 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                 val content = body?.choices?.firstOrNull()?.message?.content ?: ""
                 Result.success(content)
             } else {
-                val errorBody = response.errorBody()?.string() ?: ""
-                Result.failure(Exception("API 错误: $errorBody"))
+                val message = apiErrorMessage(response.code())
+                AppLogger.log("ChatRepository", "非成功 HTTP 响应: ${response.code()}")
+                Result.failure(Exception(message))
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            Result.failure(e)
+            AppLogger.log("ChatRepository", "请求异常: ${e.javaClass.simpleName}")
+            Result.failure(Exception(networkErrorMessage(e), e))
         }
     }
 
@@ -176,7 +185,9 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                 request = request
             )
             if (response.isSuccessful) {
-                val reader = BufferedReader(InputStreamReader(response.body()!!.byteStream()))
+                val responseBody = response.body()
+                    ?: throw Exception("服务器未返回流式响应")
+                val reader = BufferedReader(InputStreamReader(responseBody.byteStream()))
                 var line: String?
                 while (reader.readLine().also { line = it } != null) {
                     val currentLine = line ?: continue
@@ -197,11 +208,16 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                 }
                 reader.close()
             } else {
-                val errorBody = response.errorBody()?.string() ?: ""
-                throw Exception("API 错误: $errorBody")
+                AppLogger.log("ChatRepository", "流式请求 HTTP ${response.code()}")
+                throw ApiRequestException(response.code(), apiErrorMessage(response.code()))
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
+        } catch (e: Exception) {
+            if (e.message?.startsWith("请求失败") != true) {
+                AppLogger.log("ChatRepository", "流式请求异常: ${e.javaClass.simpleName}")
+            }
+            throw Exception(networkErrorMessage(e), e)
         }
     }.flowOn(Dispatchers.IO)
 
@@ -217,7 +233,9 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                 request = request
             )
             if (response.isSuccessful) {
-                val reader = BufferedReader(InputStreamReader(response.body()!!.byteStream()))
+                val responseBody = response.body()
+                    ?: throw Exception("服务器未返回流式响应")
+                val reader = BufferedReader(InputStreamReader(responseBody.byteStream()))
                 var line: String?
                 while (reader.readLine().also { line = it } != null) {
                     val currentLine = line ?: continue
@@ -238,13 +256,43 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                 }
                 reader.close()
             } else {
-                val errorBody = response.errorBody()?.string() ?: ""
-                throw Exception("API 错误: $errorBody")
+                AppLogger.log("ChatRepository", "流式请求 HTTP ${response.code()}")
+                throw ApiRequestException(response.code(), apiErrorMessage(response.code()))
             }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
+        } catch (e: Exception) {
+            if (e.message?.startsWith("请求失败") != true) {
+                AppLogger.log("ChatRepository", "流式请求异常: ${e.javaClass.simpleName}")
+            }
+            throw Exception(networkErrorMessage(e), e)
         }
     }.flowOn(Dispatchers.IO)
+
+    private class ApiRequestException(
+        val statusCode: Int,
+        override val message: String
+    ) : Exception(message)
+
+    private fun apiErrorMessage(code: Int): String = when (code) {
+        400 -> "请求参数有误，请检查模型配置。"
+        401 -> "API Key 无效或已失效，请检查模型配置。"
+        403 -> "API 请求被拒绝，请检查账号权限或接口地址。"
+        404 -> "接口或模型不存在，请检查 API 地址和模型名称。"
+        408 -> "请求超时，请稍后再试。"
+        429 -> "请求过于频繁或额度不足，请稍后再试。"
+        in 500..599 -> "AI 服务暂时不可用，请稍后再试。"
+        else -> "请求失败（HTTP $code），请检查网络和模型配置。"
+    }
+
+    private fun networkErrorMessage(error: Throwable): String = when (error) {
+        is ApiRequestException -> error.message
+        is java.net.UnknownHostException -> "无法连接 AI 服务，请检查网络或 API 地址。"
+        is java.net.ConnectException -> "无法连接 AI 服务，请检查网络或 API 地址。"
+        is java.net.SocketTimeoutException -> "连接 AI 服务超时，请稍后再试。"
+        else -> error.message?.takeIf { it.startsWith("请求失败") || it.startsWith("API Key") || it.startsWith("接口") }
+            ?: "网络请求失败，请稍后再试。"
+    }
 
     suspend fun backgroundReflection(
         model: String,
@@ -277,4 +325,6 @@ class ChatRepository(private val memoryManager: MemoryManager) {
             } else null
         } catch (_: Exception) { null }
     }
+
+
 }

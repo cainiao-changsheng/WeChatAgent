@@ -1,4 +1,43 @@
+## 1.0.16 代码审查与安全加固（2026-09-30）
+
+- API Key 迁移改为“加密写入并回读成功后再删除旧明文”，避免迁移异常导致凭据丢失。
+- GitHub 调试 Token 统一由 Android Keystore 加密保存，旧版明文配置仅在迁移验证成功后删除。
+- API 地址禁止携带用户信息、查询参数和片段；生产环境仅允许 HTTPS，调试环境的 HTTP 仅限本机地址。
+- 在线更新只接受 GitHub 官方 HTTPS 下载域名，并限制 APK 大小、检查 ZIP/APK 文件头后再进入安装器。
+- 关闭 Android 自动备份，避免应用凭据/聊天数据进入系统自动备份链路。
+- GitHub Token 输入框改为密码样式，减少调试页面直接暴露凭据。
+
+## 1.0.15 最终代码审查修复
+
+- GitHub 调试 Token 改用 Android Keystore + AES-GCM 安全存储，并自动迁移旧版明文 Token。
+- 移除仓库内固定 Debug 私钥，改用 Gradle 默认 Debug 签名。
+- 强化日志凭据脱敏、HTTP 错误处理、SSE 空响应保护与 API 地址校验。
+- Retrofit 客户端地址切换与实例创建增加同步保护。
+
+
+## 1.0.14 代码审查修复（最终整理版）
+
+- API Key 使用 Android Keystore + AES-GCM 加密保存，并兼容迁移旧版 DataStore 明文配置。
+- 网络日志不记录 BODY，敏感 Header 脱敏，应用日志增加二次凭据脱敏。
+- API 错误不再把完整服务端 error body 原样暴露给 UI。
+- SSE 流式响应增加空 Body 保护，并保留协程取消语义。
+- API Base URL 保存前进行 HTTP/HTTPS 地址校验。
+- Retrofit Client 的服务重建改为同步，避免并发切换地址时出现竞态。
+- Release 开启 R8/资源压缩；CI 同时执行测试、Lint、Debug 与 Release 构建。
+- 移除无实际用途的 MEDIA_CONTENT_CONTROL 权限；保留 APK 自动更新所需的 REQUEST_INSTALL_PACKAGES。
+- 移除仓库内固定 `debug.p12` 调试私钥，改用 Gradle 默认 Debug 签名。
 # WeChatAgent 更新日志
+
+## v1.0.14 P0/P1 安全与稳定性优化（2026-09-30）
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 安全：API Key 改为 Android Keystore 加密存储 | 新增 `SecureApiKeyStore`，使用 Android Keystore AES-GCM；旧版 DataStore 明文 API Key 首次启动自动迁移并删除旧字段，避免升级丢配置。 |
+| 2 | 安全：网络日志禁止记录 BODY | `RetrofitClient` Debug 仅使用 BASIC，Release 使用 NONE；Authorization/Cookie 等敏感 Header 脱敏，不记录聊天正文、图片或响应 BODY。 |
+| 3 | 稳定性：网络错误统一为安全的用户提示 | `ChatRepository` 不再把服务端原始 error body 放入异常，按 HTTP 状态码和常见网络异常返回可读提示；同时保留 CancellationException 的协程取消语义。 |
+| 4 | 构建：Release 开启 R8 与资源压缩 | `app/build.gradle.kts` 的 Release 启用 `isMinifyEnabled` 和 `isShrinkResources`，继续使用现有 ProGuard 规则。 |
+| 5 | CI：同时验证测试、Lint、Debug/Release | GitHub Actions 增加 `testDebugUnitTest`、`lintDebug`、`assembleDebug`、`assembleRelease`，统一上传两个 APK artifact。 |
+| 6 | 文档：补充 README | 增加架构、安全存储、构建、签名、日志和后续 Roadmap 说明。 |
 
 > 本文档记录每次版本更新的内容与实现方法，仅供开发追溯，不打包进 App。
 

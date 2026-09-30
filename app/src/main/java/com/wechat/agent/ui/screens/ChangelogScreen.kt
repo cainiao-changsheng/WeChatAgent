@@ -70,7 +70,7 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
-                    version = "v1.0.14",
+                    version = "v1.0.16",
                     date = "2026-09-30",
                     items = listOf(
                         "修复：聊天列表改为全局共享，多名好友会话同时显示不串号",

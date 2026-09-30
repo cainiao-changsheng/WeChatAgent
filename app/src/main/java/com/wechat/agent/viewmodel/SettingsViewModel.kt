@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.wechat.agent.data.AgentProfile
 import com.wechat.agent.data.AdvancedSettings
+import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.AutoBackupConfig
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.network.ChatMessage
@@ -91,9 +92,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun saveSettings(url: String, key: String, model: String) {
         viewModelScope.launch {
-            settingsManager.saveApiSettings(url, key, model)
-            RetrofitClient.updateBaseUrl(url)
-            _saveSuccess.value = true
+            runCatching {
+                RetrofitClient.updateBaseUrl(url)
+                settingsManager.saveApiSettings(url, key, model)
+            }.onSuccess {
+                _saveSuccess.value = true
+            }.onFailure {
+                _saveSuccess.value = false
+                AppLogger.log("SettingsVM", "保存 API 配置失败: ${it.javaClass.simpleName}")
+            }
         }
     }
 

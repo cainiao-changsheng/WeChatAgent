@@ -11,8 +11,8 @@ android {
         applicationId = "com.wechat.agent"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.0.14"
+        versionCode = 16
+        versionName = "1.0.16"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,23 +22,15 @@ android {
 
     buildTypes {
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            // 使用 Android/Gradle 默认 Debug 签名，不在源码仓库携带固定调试私钥。
         }
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-    }
-    signingConfigs {
-        getByName("debug") {
-            storeFile = file("debug.p12")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-            storeType = "PKCS12"
         }
     }
     compileOptions {

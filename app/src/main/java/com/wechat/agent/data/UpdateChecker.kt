@@ -10,6 +10,8 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
+import java.util.concurrent.TimeUnit
+
 
 data class UpdateInfo(
     val latestVersion: String,
@@ -18,26 +20,29 @@ data class UpdateInfo(
     val hasUpdate: Boolean
 )
 
-/**
- * 在线更新：检查 GitHub Release 最新版本，下载 APK 并走系统安装器覆盖安装。
- */
+/** 在线更新：仅接受 GitHub 官方来源的 APK，并在安装前做基本文件完整性检查。 */
 object UpdateChecker {
-
     private const val REPO = "cainiao-changsheng/WeChatAgent"
     private const val BRANCH = "master"
+    private const val MAX_APK_BYTES = 100L * 1024L * 1024L
+    private val allowedHosts = setOf(
+        "github.com",
+        "raw.githubusercontent.com",
+        "objects.githubusercontent.com",
+        "release-assets.githubusercontent.com",
+        "github-releases.githubusercontent.com"
+    )
     private val client = OkHttpClient.Builder()
-        .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
         .build()
 
-    /** 查询最新版本并和当前版本比较；网络/解析失败返回 null。 */
     suspend fun checkLatest(currentVersion: String): UpdateInfo? = withContext(Dispatchers.IO) {
         runCatching {
             fetchReleaseFromApi(currentVersion) ?: fetchUpdateInfoFromRaw(currentVersion)
         }.getOrNull()
     }
 
-    /** 主源：GitHub Releases API。 */
     private suspend fun fetchReleaseFromApi(currentVersion: String): UpdateInfo? = runCatching {
         val req = Request.Builder()
             .url("https://api.github.com/repos/$REPO/releases/latest")
@@ -54,24 +59,20 @@ object UpdateChecker {
             val assets = json.optJSONArray("assets")
             if (assets != null) {
                 for (i in 0 until assets.length()) {
-                    val a = assets.optJSONObject(i)
-                    val name = a?.optString("name", "") ?: ""
-                    if (name.endsWith(".apk")) {
-                        downloadUrl = a.optString("browser_download_url", "")
+                    val asset = assets.optJSONObject(i) ?: continue
+                    val name = asset.optString("name", "")
+                    val candidate = asset.optString("browser_download_url", "")
+                    if (name.endsWith(".apk", ignoreCase = true) && isAllowedDownloadUrl(candidate)) {
+                        downloadUrl = candidate
                         break
                     }
                 }
             }
-            UpdateInfo(
-                latestVersion = tag,
-                downloadUrl = downloadUrl,
-                releaseNotes = notes,
-                hasUpdate = tag.isNotBlank() && versionCompare(tag, currentVersion) > 0
-            )
+            if (tag.isBlank()) return@runCatching null
+            UpdateInfo(tag, downloadUrl, notes, versionCompare(tag, currentVersion) > 0)
         }
     }.getOrNull()
 
-    /** 备用源：仓库内 update_info.json（raw 域名通常比 api.github.com 更易访问）。 */
     private suspend fun fetchUpdateInfoFromRaw(currentVersion: String): UpdateInfo? = runCatching {
         val req = Request.Builder()
             .url("https://raw.githubusercontent.com/$REPO/$BRANCH/update_info.json")
@@ -84,39 +85,50 @@ object UpdateChecker {
             val tag = json.optString("version", "").removePrefix("v")
             val downloadUrl = json.optString("download_url", "")
             val notes = json.optString("notes", "").take(300)
-            if (tag.isBlank()) return@runCatching null
-            UpdateInfo(
-                latestVersion = tag,
-                downloadUrl = downloadUrl,
-                releaseNotes = notes,
-                hasUpdate = versionCompare(tag, currentVersion) > 0
-            )
+            if (tag.isBlank() || !isAllowedDownloadUrl(downloadUrl)) return@runCatching null
+            UpdateInfo(tag, downloadUrl, notes, versionCompare(tag, currentVersion) > 0)
         }
     }.getOrNull()
 
-    /** 下载 APK 到 cacheDir/apk 目录；失败返回 null。 */
     suspend fun downloadApk(context: Context, url: String): File? = withContext(Dispatchers.IO) {
+        if (!isAllowedDownloadUrl(url)) return@withContext null
         runCatching {
             val dir = File(context.cacheDir, "apk").apply { mkdirs() }
             val target = File(dir, "wechat_agent_update.apk")
             target.delete()
-            val req = Request.Builder()
-                .url(url)
-                .header("User-Agent", "WeChatAgent")
-                .build()
+            val req = Request.Builder().url(url).header("User-Agent", "WeChatAgent").build()
+            var downloaded = false
             client.newCall(req).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext null
-                val body = resp.body ?: return@withContext null
-                body.byteStream().use { input ->
-                    target.outputStream().use { out -> input.copyTo(out) }
+                val body = resp.body
+                val sourceAllowed = isAllowedDownloadUrl(resp.request.url.toString())
+                if (resp.isSuccessful && sourceAllowed && body != null && body.contentLength() <= MAX_APK_BYTES) {
+                    body.byteStream().use { input ->
+                        target.outputStream().use { out ->
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var total = 0L
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                if (total > MAX_APK_BYTES) break
+                                out.write(buffer, 0, count)
+                            }
+                            downloaded = total in 1..MAX_APK_BYTES
+                        }
+                    }
                 }
             }
-            target
+            if (!downloaded || !isLikelyApk(target)) {
+                target.delete()
+                null
+            } else {
+                target
+            }
         }.getOrNull()
     }
 
-    /** 通过系统安装器安装 APK（版本号不低于当前即可覆盖安装，无需卸载旧版）。 */
     fun installApk(context: Context, apkFile: File): Boolean {
+        if (!apkFile.isFile || apkFile.length() <= 0L || !isLikelyApk(apkFile)) return false
         return try {
             val uri: Uri = FileProvider.getUriForFile(
                 context,
@@ -133,6 +145,21 @@ object UpdateChecker {
             false
         }
     }
+
+    private fun isAllowedDownloadUrl(value: String): Boolean = runCatching {
+        val uri = Uri.parse(value)
+        val host = uri.host?.lowercase() ?: return false
+        uri.scheme == "https" && uri.userInfo == null && uri.query == null &&
+            uri.fragment == null && host in allowedHosts
+    }.getOrDefault(false)
+
+    private fun isLikelyApk(file: File): Boolean = runCatching {
+        if (file.length() < 4L || file.length() > MAX_APK_BYTES) return false
+        file.inputStream().use { input ->
+            input.read() == 'P'.code && input.read() == 'K'.code &&
+                input.read() == 3 && input.read() == 4
+        }
+    }.getOrDefault(false)
 
     private fun versionCompare(a: String, b: String): Int {
         val pa = a.split(".").map { it.toIntOrNull() ?: 0 }

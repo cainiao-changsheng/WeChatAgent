@@ -43,9 +43,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.wechat.agent.data.AppLogger
+import com.wechat.agent.data.SecureGitHubTokenStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -63,20 +65,13 @@ import java.util.concurrent.TimeUnit
 private const val GITHUB_OWNER = "cainiao-changsheng"
 private const val GITHUB_REPO = "WeChatAgent"
 private const val GITHUB_BRANCH = "master"
-private const val PREFS_NAME = "debug_prefs"
-private const val KEY_TOKEN = "github_token"
 
-/** 读取已保存的 GitHub Token。 */
-internal fun getSavedGitHubToken(context: Context): String {
-    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    return prefs.getString(KEY_TOKEN, "") ?: ""
-}
+/** 读取已保存的 GitHub Token；首次读取时由安全存储负责迁移旧版明文配置。 */
+internal fun getSavedGitHubToken(context: Context): String = SecureGitHubTokenStore(context).read()
 
-/** 保存 GitHub Token。 */
-internal fun saveGitHubToken(context: Context, token: String) {
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .edit().putString(KEY_TOKEN, token.trim()).apply()
-}
+/** 保存 GitHub Token；返回 false 表示 Keystore 写入失败。 */
+internal fun saveGitHubToken(context: Context, token: String): Boolean =
+    SecureGitHubTokenStore(context).write(token)
 
 /** 上传日志内容到 GitHub 仓库，返回成功时的上传路径。 */
 private fun uploadToGithub(token: String, content: String, filename: String): String {
@@ -269,24 +264,29 @@ fun LogScreen(
             text = {
                 Column {
                     Text(
-                        "首次上传需填写 GitHub Personal Access Token（仓库权限），将保存到本机调试配置。",
+                        "Token 将使用 Android Keystore 加密保存。上传前请确认日志内容不包含你不希望公开到仓库的信息。",
                         style = MaterialTheme.typography.bodySmall
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = tokenInput,
                         onValueChange = { tokenInput = it },
-                        label = { Text("ghp_xxx") },
-                        singleLine = true
+                        label = { Text("GitHub Token") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
                     )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        saveGitHubToken(context, tokenInput)
-                        showTokenDialog = false
-                        doUpload()
+                        if (saveGitHubToken(context, tokenInput)) {
+                            tokenInput = ""
+                            showTokenDialog = false
+                            doUpload()
+                        } else {
+                            uploadError = "Token 加密保存失败，请检查设备安全存储后重试。"
+                        }
                     }
                 ) { Text("保存并上传") }
             },

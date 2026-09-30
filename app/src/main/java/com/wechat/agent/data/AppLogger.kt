@@ -29,7 +29,8 @@ object AppLogger {
     /** 记录一条日志（线程安全）。 */
     @Synchronized
     fun log(tag: String, message: String) {
-        val line = "[${dateFormat.format(Date())}] [$tag] $message"
+        val safeMessage = redact(message)
+        val line = "[${dateFormat.format(Date())}] [$tag] $safeMessage"
         synchronized(memoryLines) {
             memoryLines.addLast(line)
             while (memoryLines.size > MAX_MEMORY_LINES) memoryLines.removeFirst()
@@ -59,10 +60,20 @@ object AppLogger {
     @Synchronized
     fun fileSize(): Long = try { logFile?.length() ?: 0L } catch (_: Exception) { 0L }
 
+    /** 对常见凭据/授权头做二次脱敏，避免调用方误把密钥写入日志。 */
+    private fun redact(message: String): String {
+        return message
+            .replace(Regex("(?i)(Bearer\\s+)[A-Za-z0-9._~+/=-]+"), "$1[REDACTED]")
+            .replace(Regex("(?i)(api[_-]?key\\s*[=:]\\s*)[^,\\s}]+"), "$1[REDACTED]")
+            .replace(Regex("(?i)(authorization\\s*[=:]\\s*)[^,\\s}]+"), "$1[REDACTED]")
+            .replace(Regex("(?i)(cookie\\s*[=:]\\s*)[^,\\s}]+"), "$1[REDACTED]")
+    }
+
     /** 清空日志。 */
     @Synchronized
     fun clear() {
         synchronized(memoryLines) { memoryLines.clear() }
         try { logFile?.writeText("") } catch (_: Exception) {}
     }
-}
+
+

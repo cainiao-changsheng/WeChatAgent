@@ -13,6 +13,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -94,6 +98,9 @@ class SettingsManager private constructor(private val context: Context) {
     }
 
     private val gson = Gson()
+    private val secureApiKeyStore = SecureApiKeyStore(context)
+    private val apiKeyScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val _apiKey = MutableStateFlow(secureApiKeyStore.read())
     private val profilePrefs: SharedPreferences =
         context.getSharedPreferences("agent_profiles", Context.MODE_PRIVATE)
 
@@ -115,6 +122,7 @@ class SettingsManager private constructor(private val context: Context) {
     init {
         // 初始不再自动创建默认 AI 好友：初次打开 App 默认无好友，需用户手动添加。
         // 已存在档案的存量用户不受影响。
+        migrateLegacyApiKey()
     }
 
     fun addAgentProfile(
@@ -250,9 +258,8 @@ class SettingsManager private constructor(private val context: Context) {
         preferences[API_URL] ?: DEFAULT_API_URL
     }
 
-    val apiKey: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[API_KEY] ?: ""
-    }
+    /** API Key 只从加密存储读取，不再通过 DataStore 保存明文。 */
+    val apiKey: StateFlow<String> = _apiKey.asStateFlow()
 
     val modelName: Flow<String> = context.dataStore.data.map { preferences ->
         preferences[MODEL_NAME] ?: DEFAULT_MODEL
@@ -300,10 +307,33 @@ class SettingsManager private constructor(private val context: Context) {
     }
 
     suspend fun saveApiSettings(url: String, key: String, model: String) {
+        require(secureApiKeyStore.write(key.trim())) { "API Key 安全存储失败" }
+        _apiKey.value = key.trim()
         context.dataStore.edit { preferences ->
-            preferences[API_URL] = url
-            preferences[API_KEY] = key
-            preferences[MODEL_NAME] = model
+            preferences[API_URL] = url.trim()
+            // 旧版本曾将 API Key 明文放在 DataStore；保存新配置时主动移除旧字段。
+            preferences.remove(API_KEY)
+            preferences[MODEL_NAME] = model.trim()
+        }
+    }
+
+    private fun migrateLegacyApiKey() {
+        apiKeyScope.launch {
+            runCatching {
+                val legacyKey = context.dataStore.data.first()[API_KEY].orEmpty()
+                if (legacyKey.isNotBlank() && secureApiKeyStore.read().isBlank()) {
+                    // 只有加密写入并回读成功后才删除旧明文字段，避免迁移失败导致凭据丢失。
+                    if (secureApiKeyStore.write(legacyKey) && secureApiKeyStore.read() == legacyKey) {
+                        _apiKey.value = legacyKey
+                        context.dataStore.edit { preferences -> preferences.remove(API_KEY) }
+                    }
+                } else if (legacyKey.isBlank()) {
+                    // 没有旧凭据时清理遗留字段。
+                    context.dataStore.edit { preferences -> preferences.remove(API_KEY) }
+                }
+            }.onFailure {
+                AppLogger.log("Settings", "API Key 迁移失败: ${it.javaClass.simpleName}")
+            }
         }
     }
 
