@@ -178,10 +178,10 @@ fun AgentDetailScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     ProfileRow(label = "年龄", value = agentAge)
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    ProfileRow(label = "设定", value = agentPersona.ifEmpty { "无" })
+                    ProfileRow(label = "人设描述", value = agentPersona.ifEmpty { "无" })
                     if (agentGlobalSettings.isNotBlank()) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                        ProfileRow(label = "全局设定", value = agentGlobalSettings)
+                        ProfileRow(label = "性格特点", value = agentGlobalSettings)
                     }
                 }
             }

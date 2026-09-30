@@ -140,7 +140,7 @@ fun AgentSetupScreen(
 
             OutlinedTextField(
                 value = name, onValueChange = { name = it },
-                label = { Text("名称") }, placeholder = { Text("给 AI 好友起个名字") },
+                label = { Text("人设名字") }, placeholder = { Text("给 AI 好友起个名字") },
                 modifier = Modifier.fillMaxWidth(), singleLine = true,
                 shape = RoundedCornerShape(8.dp)
             )
@@ -189,7 +189,7 @@ fun AgentSetupScreen(
 
             OutlinedTextField(
                 value = persona, onValueChange = { persona = it },
-                label = { Text("设定") },
+                label = { Text("人设描述") },
                 placeholder = { Text("描述 AI 好友的性格与说话风格，例如：温柔、善解人意") },
                 modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6,
                 shape = RoundedCornerShape(8.dp)
@@ -199,7 +199,7 @@ fun AgentSetupScreen(
 
             OutlinedTextField(
                 value = globalSettings, onValueChange = { globalSettings = it },
-                label = { Text("全局设定") },
+                label = { Text("性格特点") },
                 placeholder = { Text("可留空。例如：TA 喜欢清晨发动态、晚上陪你聊天") },
                 modifier = Modifier.fillMaxWidth(), minLines = 3, maxLines = 6,
                 shape = RoundedCornerShape(8.dp)

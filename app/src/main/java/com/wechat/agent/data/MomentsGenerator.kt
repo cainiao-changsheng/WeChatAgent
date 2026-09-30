@@ -90,7 +90,7 @@ class MomentsGenerator(private val memoryManager: MemoryManager) {
         return events
     }
 
-    fun generateMomentPost(state: EmotionState): MomentPost {
+    fun generateMomentPost(state: EmotionState, author: String = "AI伴侣"): MomentPost {
         val timeCat = getTimeCategory()
         val events = generateSimulatedLifeEvents(state)
         val moodEmoji = getMoodEmoji(state.mood)
@@ -115,7 +115,8 @@ class MomentsGenerator(private val memoryManager: MemoryManager) {
             timestamp = System.currentTimeMillis(),
             likeCount = randomLikes,
             commentCount = randomComments,
-            timeCategory = timeCat
+            timeCategory = timeCat,
+            author = author
         )
     }
 

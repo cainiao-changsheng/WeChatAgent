@@ -52,6 +52,7 @@ class MomentsViewModel(application: Application) : AndroidViewModel(application)
     fun generateMomentsPost() {
         viewModelScope.launch {
             _isLoading.value = true
+            val authorName = settingsManager.agentName.first()
             try {
                 val apiKey = settingsManager.apiKey.first()
                 val model = settingsManager.modelName.first()
@@ -73,7 +74,7 @@ class MomentsViewModel(application: Application) : AndroidViewModel(application)
                     .removeSuffix("\"")
                     .trim()
 
-                val post = generator.generateMomentPost(state).copy(content = cleanedContent)
+                val post = generator.generateMomentPost(state, author = authorName).copy(content = cleanedContent)
 
                 val currentPosts = _posts.value.toMutableList()
                 currentPosts.add(post)
@@ -82,7 +83,7 @@ class MomentsViewModel(application: Application) : AndroidViewModel(application)
                 savePosts()
             } catch (_: Exception) {
                 val state = memoryManager.loadEmotionSync()
-                val post = generator.generateMomentPost(state)
+                val post = generator.generateMomentPost(state, author = authorName)
                 val currentPosts = _posts.value.toMutableList()
                 currentPosts.add(post)
                 if (currentPosts.size > 50) currentPosts.removeAt(0)

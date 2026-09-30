@@ -184,6 +184,7 @@ fun MomentPostCard(
         timeFormat.format(Date(post.timestamp))
     }
     val isUserPost = post.author == "我"
+    val displayAuthor = if (post.author.isBlank() || post.author == "AI伴侣") agentName else post.author
     var showComments by remember { mutableStateOf(false) }
     var commentDraft by remember { mutableStateOf("") }
 
@@ -220,7 +221,7 @@ fun MomentPostCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            post.author,
+                            displayAuthor,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = if (isUserPost) MaterialTheme.colorScheme.primary else WeChatGreen

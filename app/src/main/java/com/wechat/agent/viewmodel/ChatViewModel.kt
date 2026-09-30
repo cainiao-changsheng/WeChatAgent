@@ -232,6 +232,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val state = _emotionState.value
             val apiKey = settingsManager.apiKey.first()
             val model = settingsManager.modelName.first()
+            val authorName = settingsManager.agentName.first()
             val post = if (apiKey.isNotEmpty()) {
                 val prompt = momentsGenerator.buildGenerationPrompt(
                     state, memoryManager.getL1Memory(), memoryManager.getL2Memory()
@@ -240,9 +241,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     listOf(ChatMessage(role = "user", content = prompt)))
                 val content = result.getOrElse { momentsGenerator.generateSimulatedLifeEvents(state) }
                     .removePrefix("\"").removeSuffix("\"").trim()
-                momentsGenerator.generateMomentPost(state).copy(content = content)
+                momentsGenerator.generateMomentPost(state, author = authorName).copy(content = content)
             } else {
-                momentsGenerator.generateMomentPost(state)
+                momentsGenerator.generateMomentPost(state, author = authorName)
             }
 
             val currentPosts = _momentsPosts.value.toMutableList()
@@ -599,6 +600,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
             val apiKey = settingsManager.apiKey.first()
             val model = settingsManager.modelName.first()
+            val authorName = settingsManager.agentName.first()
 
             val post = if (apiKey.isNotEmpty()) {
                 val prompt = momentsGenerator.buildGenerationPrompt(
@@ -610,9 +612,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     listOf(ChatMessage(role = "user", content = prompt)))
                 val content = result.getOrElse { momentsGenerator.generateSimulatedLifeEvents(state) }
                     .removePrefix("\"").removeSuffix("\"").trim()
-                momentsGenerator.generateMomentPost(state).copy(content = content)
+                momentsGenerator.generateMomentPost(state, author = authorName).copy(content = content)
             } else {
-                momentsGenerator.generateMomentPost(state)
+                momentsGenerator.generateMomentPost(state, author = authorName)
             }
 
             val currentPosts = _momentsPosts.value.toMutableList()
@@ -887,6 +889,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun generateMomentsPost() {
         viewModelScope.launch {
+            val authorName = settingsManager.agentName.first()
             try {
                 val apiKey = settingsManager.apiKey.first()
                 val model = settingsManager.modelName.first()
@@ -898,14 +901,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     listOf(ChatMessage(role = "user", content = prompt)))
                 val content = result.getOrElse { momentsGenerator.generateSimulatedLifeEvents(state) }
                     .removePrefix("\"").removeSuffix("\"").trim()
-                val post = momentsGenerator.generateMomentPost(state).copy(content = content)
+                val post = momentsGenerator.generateMomentPost(state, author = authorName).copy(content = content)
                 val current = _momentsPosts.value.toMutableList()
                 current.add(post)
                 if (current.size > 50) current.removeAt(0)
                 _momentsPosts.value = current
                 saveMomentsToStorage()
             } catch (_: Exception) {
-                val post = momentsGenerator.generateMomentPost(_emotionState.value)
+                val post = momentsGenerator.generateMomentPost(_emotionState.value, author = authorName)
                 val current = _momentsPosts.value.toMutableList()
                 current.add(post)
                 if (current.size > 50) current.removeAt(0)

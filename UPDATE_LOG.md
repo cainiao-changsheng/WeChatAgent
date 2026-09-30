@@ -37,6 +37,14 @@
 | C | 实验室入口参数缺失（需求 4 补全） | `SettingsScreen` 补充 `onOpenLab` 参数与 `Science` 图标 import |
 | D | 模型测试链接弹窗缺失（需求 5 补全） | `ModelConfigScreen` 补充 `testing/testResult` 状态与结果弹窗（含“模型配置失败，请检查配置或网络”兜底）；`SettingsViewModel.testModelConnection` 失败返回空串触发失败文案 |
 
+## v1.0.3（2026-09-30）三项更新
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 修复：发现页好友动态作者名始终显示“AI伴侣” | 根因：`MomentsGenerator.generateMomentPost()` 生成动态时未写入 `author`，`MomentPost.author` 走默认值“AI伴侣”。改为 `generateMomentPost(state, author)` 支持传入昵称；`ChatViewModel` 的 `autoGenerateMomentPost`/`checkAutoMoments`/`generateMomentsPost` 与 `MomentsViewModel.generateMomentsPost` 生成动态时取 `settingsManager.agentName.first()` 作为作者；`MomentsScreen` 显示层兜底：author 为空或“AI伴侣”时回退为当前好友昵称，兼容已持久化的旧动态 |
+| 2 | 界面：编辑好友文案调整 | `AgentSetupScreen` 表单标签“名称”→“人设名字”、“设定”→“人设描述”、“全局设定”→“性格特点”；`AgentDetailScreen` 档案展示同步改为“人设描述”“性格特点” |
+| 3 | 文档：同步更新本日志 | 记录本次三项改动（朋友圈昵称修复、编辑页文案、日志） |
+
 ## 构建与发布说明
 
 - 分支：`master`，JDK 21 / Gradle 8.11.1，GitHub Actions 构建 debug APK（artifact：WeChatAgent-APK）。
