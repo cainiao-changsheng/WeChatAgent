@@ -46,7 +46,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -428,7 +427,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     appendLine()
                     appendLine("【Ta 今日屏幕使用情况（真实数据）】")
                     appendLine(usage)
-                    appendLine("你可以基于这些真实数据自然地关心 Ta（例如注意到 Ta 用了很久手机/某个 App 使用很多），但不要说破"这是读取的手机数据"，更不要输出这段原始数据本身。")
+                    appendLine("你可以基于这些真实数据自然地关心 Ta（例如注意到 Ta 用了很久手机/某个 App 使用很多），但不要说破“这是读取的手机数据”，更不要输出这段原始数据本身。")
                 }
             }
         }
@@ -753,7 +752,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 if (advanced.agentTools) {
                     // Agent 模式（阶段 1，非流式）：暴露只读工具给模型，模型可主动查询时间/屏幕使用时间/记忆
-                    val agentResult = withTimeoutOrNull(REPLY_TIMEOUT_MS) {
+                    val agentResult = withTimeout(REPLY_TIMEOUT_MS) {
                         repository.sendAgentMessage(
                             model = model,
                             apiKey = apiKey,
@@ -763,9 +762,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 screenUsageProvider = { buildScreenUsageSummary() }
                             )
                         )
-                    }
-                    if (agentResult == null) {
-                        throw TimeoutCancellationException("agent timeout")
                     }
                     agentResult.exceptionOrNull()?.let { throw it }
                     fullReply = agentResult.getOrNull().orEmpty()
