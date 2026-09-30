@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
@@ -60,6 +61,7 @@ fun MyProfileScreen(
     onOpenMoments: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAdvanced: () -> Unit,
+    onOpenDebug: () -> Unit,
     bottomBar: @Composable () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -137,6 +139,11 @@ fun MyProfileScreen(
                 icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "高级", tint = Color(0xFF7C4DFF)) },
                 title = "高级",
                 onClick = onOpenAdvanced
+            )
+            ProfileMenuRow(
+                icon = { Icon(Icons.Default.Build, contentDescription = "调试", tint = Color(0xFF546E7A)) },
+                title = "调试",
+                onClick = onOpenDebug
             )
         }
     }

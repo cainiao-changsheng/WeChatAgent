@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.SharedPreferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.EmojiManager
 import com.wechat.agent.data.EmotionEngine
 import com.wechat.agent.data.ImageCacheHelper
@@ -151,6 +152,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun switchAgent(agentId: String) {
         if (agentId.isBlank()) return
+        AppLogger.log("ChatVM", "switchAgent(agentId=$agentId) 当前角色=$currentAgentId")
         viewModelScope.launch {
             settingsManager.setCurrentAgentId(agentId)
             bindAgent(agentId, apply = true)
@@ -158,6 +160,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun bindAgent(agentId: String, apply: Boolean) {
+        AppLogger.log("ChatVM", "bindAgent(agentId=$agentId, apply=$apply) 旧角色=$currentAgentId")
         currentAgentId = agentId
         memoryManager.setActiveAgent(agentId)
         chatPrefs = getApplication<Application>().getSharedPreferences(prefsName("chat_sessions"), 0)
@@ -447,10 +450,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun selectChat(chatId: String) {
+        var chat = _chats.value.find { it.id == chatId }
+        // 防御：若选中的会话属于其他角色（历史脏数据/跨角色串号），先同步切到该角色再取
+        val targetAgentId = chat?.agentId?.takeIf { it.isNotBlank() }
+        if (targetAgentId != null && targetAgentId != currentAgentId) {
+            AppLogger.log("ChatVM", "selectChat 检测到会话$chatId 属于角色$targetAgentId（当前$currentAgentId），先切换绑定")
+            settingsManager.setCurrentAgentId(targetAgentId)
+            bindAgent(targetAgentId, apply = true)
+            chat = _chats.value.find { it.id == chatId }
+        }
         _currentChatId.value = chatId
-        val chat = _chats.value.find { it.id == chatId }
         chat?.agentId?.takeIf { it.isNotBlank() }?.let { memoryManager.setActiveAgent(it) }
         _currentMessages.value = chat?.messages ?: emptyList()
+        AppLogger.log("ChatVM", "selectChat(chatId=$chatId) agentId=${chat?.agentId} 当前角色=$currentAgentId")
     }
 
     /**
@@ -458,10 +470,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      * 避免误用列表第一条旧会话导致新好友消息预览丢失。
      */
     fun openOrCreateChatWithAgent(agentId: String): String {
+        AppLogger.log("ChatVM", "openOrCreateChatWithAgent(agentId=$agentId) 当前角色=$currentAgentId")
+        // 关键：若当前绑定角色与目标角色不一致，必须同步切换角色绑定，
+        // 否则 chat 会被保存到上一个角色的 chatPrefs，造成跨角色串号（李依娜→林晚舟）
+        if (currentAgentId != agentId) {
+            settingsManager.setCurrentAgentId(agentId)
+            switchBindingPreservingChat(agentId)
+        }
         val existing = _chats.value.find { it.agentId == agentId }
         if (existing != null) {
             _currentChatId.value = existing.id
             _currentMessages.value = existing.messages
+            AppLogger.log("ChatVM", "openOrCreateChatWithAgent 复用会话 id=${existing.id}")
             return existing.id
         }
         val chat = Chat(agentId = agentId, title = "新对话")
@@ -470,7 +490,30 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _currentMessages.value = emptyList()
         memoryManager.setActiveAgent(agentId)
         saveChatsToStorage()
+        AppLogger.log("ChatVM", "openOrCreateChatWithAgent 新建会话 id=${chat.id}")
         return chat.id
+    }
+
+    /** 切换角色 prefs 但不清空当前会话状态，供 openOrCreateChatWithAgent 使用。 */
+    private fun switchBindingPreservingChat(agentId: String) {
+        currentAgentId = agentId
+        memoryManager.setActiveAgent(agentId)
+        chatPrefs = getApplication<Application>().getSharedPreferences(prefsName("chat_sessions"), 0)
+        momentsPrefs = getApplication<Application>().getSharedPreferences(prefsName("moments"), 0)
+        statusPrefs = getApplication<Application>().getSharedPreferences(prefsName("agent_status"), 0)
+        loadChatsFromStorage()
+        loadMomentsFromStorage()
+        _agentStatus.value = decisionEngine.loadStatus(statusPrefs)
+        viewModelScope.launch {
+            _emotionState.value = memoryManager.loadEmotion()
+            _moodText.value = emotionEngine.getMoodDescription(
+                _emotionState.value.mood, _emotionState.value.affinity
+            )
+            refreshAgentStatus()
+        }
+        startStatusLoop()
+        startBackupLoop()
+        AppLogger.log("ChatVM", "switchBindingPreservingChat -> $agentId")
     }
 
     fun sendMessage(content: String) {
@@ -481,6 +524,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         repository.formatRule = typingTracker.getFormatRule()
 
         val chatId = _currentChatId.value ?: createNewChat()
+        val chatAgentId = _chats.value.find { it.id == chatId }?.agentId
+        AppLogger.log("ChatVM", "sendMessage chatId=$chatId agentId=$chatAgentId 当前角色=$currentAgentId")
         _chats.value.find { it.id == chatId }?.agentId?.takeIf { it.isNotBlank() }
             ?.let { memoryManager.setActiveAgent(it) }
         val userMessage = Message(content = content, role = Role.USER)

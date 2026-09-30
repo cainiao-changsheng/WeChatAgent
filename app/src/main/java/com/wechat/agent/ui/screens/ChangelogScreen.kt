@@ -70,6 +70,16 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.13",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "「我」页新增「调试」入口",
+                        "调试页新增「日志」，支持查看运行时日志详情",
+                        "日志详情底部新增「上传到 GitHub」按钮",
+                        "修复：不同好友名片发消息后聊天列表串号（跨角色收到回复）"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.12",
                     date = "2026-09-30",
                     items = listOf(

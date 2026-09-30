@@ -2,6 +2,17 @@
 
 > 本文档记录每次版本更新的内容与实现方法，仅供开发追溯，不打包进 App。
 
+## v1.0.13（2026-09-30）调试能力与跨角色串号修复
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 新增：“我”页“调试”入口 | `MyProfileScreen` 新增 `onOpenDebug` 参数与“调试”菜单项；`MainActivity` 注册 `debug` 路由并接入 `DebugScreen.kt` |
+| 2 | 新增：调试页“日志”查看详情 | 新建 `DebugScreen.kt`（调试菜单，含“日志”入口与日志文件大小）；新建 `LogScreen.kt` 展示运行时日志（最近 800 行，ChatVM/异常行高亮） |
+| 3 | 新增：日志详情底部“上传到 GitHub” | `LogScreen` 底部上传按钮调用 GitHub Contents API（`PUT /repos/cainiao-changsheng/WeChatAgent/contents/logs/`，branch master）；首次上传需填写 GitHub Token，保存在本机 `debug_prefs` |
+| 4 | 新增：运行时日志记录器 | 新建 `data/AppLogger.kt`：追加写 `filesDir/logs/app.log`（2MB 滚动截断），内存保留最近 800 行；`MainActivity.onCreate` 初始化 |
+| 5 | 新增：会话切换关键路径埋点 | `ChatViewModel` 的 `bindAgent`/`switchAgent`/`selectChat`/`openOrCreateChatWithAgent`/`sendMessage` 均写 `AppLogger`，便于定位串号/消息错乱问题 |
+| 6 | 修复：重大 bug——点击不同好友名片发消息后聊天列表串号（李依娜/林晚舟对话混淆、重启后跨角色收到回复） | 根因：`openOrCreateChatWithAgent` 仅切记忆库、未同步切换 `currentAgentId`/`chatPrefs`，导致新会话写入上一角色的 prefs，重启后按 agentId 误显示在其他角色聊天列表。修复：`openOrCreateChatWithAgent` 检测角色不一致时先 `settingsManager.setCurrentAgentId` + `switchBindingPreservingChat`（同步切换 prefs 但不清空当前会话）再创建/复用会话；`selectChat` 增加防御——若所选会话的 agentId 与当前角色不一致，先切到该角色绑定；`MainActivity` chat 路由进入时 `selectChat(id)` 兜底，避免异步 `switchAgent` 清空当前会话后打开空列表 |
+
 ## v1.0.1（2026-09-30）九项更新
 
 | # | 更新内容 | 实现方法 |

@@ -14,6 +14,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.AutoBackupConfig
 import com.wechat.agent.ui.components.WeChatBottomBar
 import com.wechat.agent.ui.screens.AdvancedScreen
@@ -24,9 +25,11 @@ import com.wechat.agent.ui.screens.ChatListScreen
 import com.wechat.agent.ui.screens.ChatScreen
 import com.wechat.agent.ui.screens.ComposeMomentScreen
 import com.wechat.agent.ui.screens.ContactsScreen
+import com.wechat.agent.ui.screens.DebugScreen
 import com.wechat.agent.ui.screens.DiscoverScreen
 import com.wechat.agent.ui.screens.EditProfileScreen
 import com.wechat.agent.ui.screens.LabScreen
+import com.wechat.agent.ui.screens.LogScreen
 import com.wechat.agent.ui.screens.ModelConfigScreen
 import com.wechat.agent.ui.screens.MomentsScreen
 import com.wechat.agent.ui.screens.MyProfileScreen
@@ -39,6 +42,7 @@ import com.wechat.agent.viewmodel.SettingsViewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLogger.init(this)
         setContent {
             WeChatAgentTheme {
                 AppNavigation()
@@ -208,6 +212,11 @@ fun AppNavigation() {
 
         composable("chat/{chatId}") { backStackEntry ->
             val id = backStackEntry.arguments?.getString("chatId") ?: return@composable
+            // 兜底：确保打开会话时 ViewModel 当前会话与该 chatId 一致
+            // （避免 agentDetail 异步 switchAgent 清空 _currentChatId 后打开空会话）
+            LaunchedEffect(id) {
+                chatViewModel.selectChat(id)
+            }
             val chat = chats.find { it.id == id }
             val chatAgent = chat?.agentId?.let { aid -> agentProfiles.find { it.id == aid } }
             ChatScreen(
@@ -293,6 +302,7 @@ fun AppNavigation() {
                 onOpenMoments = { navigateToTab(navController, "moments") },
                 onOpenSettings = { navController.navigate("settingsDetail") },
                 onOpenAdvanced = { navController.navigate("advanced") },
+                onOpenDebug = { navController.navigate("debug") },
                 bottomBar = {
                     WeChatBottomBar(
                         currentRoute = currentRoute,
@@ -316,6 +326,19 @@ fun AppNavigation() {
         composable("advanced") {
             AdvancedScreen(
                 viewModel = settingsViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable("debug") {
+            DebugScreen(
+                onBack = { navController.popBackStack() },
+                onOpenLogs = { navController.navigate("debugLogs") }
+            )
+        }
+
+        composable("debugLogs") {
+            LogScreen(
                 onBack = { navController.popBackStack() }
             )
         }
