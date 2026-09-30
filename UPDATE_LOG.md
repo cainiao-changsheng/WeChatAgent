@@ -61,6 +61,12 @@
 | 1 | 修复：每次构建APK签名不同导致无法覆盖安装 | 根因：debug 包默认使用 GitHub Actions runner 机器随机生成的 debug keystore 签名，每次构建签名不一致，系统判定为不同应用。解决：用 openssl 生成固定 PKCS12 签名文件 `app/debug.p12`（alias=androiddebugkey，密码 android）提交仓库；`app/build.gradle.kts` 的 signingConfigs 修改内置 debug 签名指向该文件，debug buildType 显式绑定。此后每次构建均使用同一密钥签名，可覆盖安装（后续升级发布需保留此 keystore 不变） |
 | 2 | 说明：Android 无法“去掉签名验证” | 系统强制所有 APK 必须有签名才能安装，不存在无签名安装；固定签名密钥是唯一正解。若未来上架应用商店，需另行生成正式 release keystore 并妥善保管 |
 
+## v1.0.6（2026-09-30）修复大模型未获取好友设定名字
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 修复：大模型回复未拿到设定名字（自称“阿深”而非设定名） | 根因：`SettingsManager` 在 `ChatViewModel`/`SettingsViewModel`/`MomentsViewModel` 中各自 `new` 出独立实例，内存 `agentProfiles` 快照互不同步——设置页通过 SettingsViewModel 实例保存“李依娜”后，ChatViewModel 持的仍是构造时读入的旧快照，`buildPersonaPrompt(agentId)` 按 id 找不到档案返回空串，personaPrompt 未注入，大模型凭默认/记忆自由发挥自称。解决：`SettingsManager` 改为单例（`companion object` 的 `getInstance(context)` + `@Volatile` + synchronized 双检锁，私有构造），三个 ViewModel 统一改调 `SettingsManager.getInstance(application)`，档案增删改后所有消费方实时同步 |
+
 ## 构建与发布说明
 
 - 分支：`master`，JDK 21 / Gradle 8.11.1，GitHub Actions 构建 debug APK（artifact：WeChatAgent-APK）。

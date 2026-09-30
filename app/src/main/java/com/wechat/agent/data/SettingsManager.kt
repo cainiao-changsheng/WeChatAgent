@@ -40,9 +40,18 @@ data class AutoBackupConfig(
     val backupOnExit: Boolean = false
 )
 
-class SettingsManager(private val context: Context) {
+class SettingsManager private constructor(private val context: Context) {
 
     companion object {
+        @Volatile
+        private var instance: SettingsManager? = null
+
+        fun getInstance(context: Context): SettingsManager {
+            return instance ?: synchronized(this) {
+                instance ?: SettingsManager(context.applicationContext).also { instance = it }
+            }
+        }
+
         val API_URL = stringPreferencesKey("api_url")
         val API_KEY = stringPreferencesKey("api_key")
         val MODEL_NAME = stringPreferencesKey("model_name")

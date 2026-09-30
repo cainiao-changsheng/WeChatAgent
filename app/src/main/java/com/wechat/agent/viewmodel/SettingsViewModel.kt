@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val settingsManager = SettingsManager(application)
+    private val settingsManager = SettingsManager.getInstance(application)
 
     val apiUrl: StateFlow<String> = settingsManager.apiUrl
         .stateIn(viewModelScope, SharingStarted.Eagerly, SettingsManager.DEFAULT_API_URL)

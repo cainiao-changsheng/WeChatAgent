@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 class MomentsViewModel(application: Application) : AndroidViewModel(application) {
 
     private val memoryManager = MemoryManager(application)
-    private val settingsManager = SettingsManager(application)
+    private val settingsManager = SettingsManager.getInstance(application)
     private val repository = ChatRepository(memoryManager)
     private val generator = MomentsGenerator(memoryManager)
     private val gson = Gson()

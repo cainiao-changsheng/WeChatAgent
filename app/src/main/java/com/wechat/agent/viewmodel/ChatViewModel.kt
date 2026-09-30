@@ -39,7 +39,7 @@ import java.util.UUID
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val settingsManager = SettingsManager(application)
+    private val settingsManager = SettingsManager.getInstance(application)
     private val memoryManager = MemoryManager(application)
     private val emotionEngine = EmotionEngine(memoryManager)
     private val repository = ChatRepository(memoryManager)
