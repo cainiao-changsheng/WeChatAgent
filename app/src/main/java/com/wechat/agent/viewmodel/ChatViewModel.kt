@@ -4,7 +4,9 @@ import android.app.Application
 import android.content.SharedPreferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.wechat.agent.data.EmojiManager
 import com.wechat.agent.data.EmotionEngine
+import com.wechat.agent.data.ImageCacheHelper
 import com.wechat.agent.data.LifeSimulator
 import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.data.MomentsGenerator
@@ -285,6 +287,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (profile.globalSettings.isNotBlank()) {
                 appendLine("全局设定：${profile.globalSettings}")
+            }
+            val stickers = emojiManager.getAllStickers()
+            if (stickers.isNotEmpty()) {
+                appendLine()
+                appendLine("【可用表情 - 对方自定义的图片表情】")
+                appendLine("聊天时你可以自然使用这些表情，格式为 [表情名] 或 表情:表情名（例如 [${stickers.first().name}]）。")
+                appendLine("聊天界面会自动把你的表情标记替换为对应图片展示给用户。表情清单如下：")
+                stickers.forEach { s ->
+                    appendLine("- ${s.name}${if (s.shortcut.isNotEmpty()) "（快捷名 ${s.shortcut}）" else ""}")
+                }
+                appendLine("表情 json 文件：${emojiManager.getStickersFilePath()}，完整内容：${emojiManager.getStickersJson()}")
             }
             appendLine("你们已经认识并且有共同记忆，回复前请先回忆记忆库中与对方的相处记忆，严格遵循以上设定来扮演这位好友，不要说破自己是 AI。")
         }
@@ -712,6 +725,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun postUserMoment(content: String, imageUri: String = "") {
         val trimmed = content.trim()
         if (trimmed.isEmpty() && imageUri.isEmpty()) return
+        // 动态图片同样缓存到内部存储，避免退出应用后丢失
+        val cachedImage = if (imageUri.isNotEmpty()) {
+            ImageCacheHelper.cacheToInternal(getApplication(), imageUri) ?: imageUri
+        } else ""
         val now = System.currentTimeMillis()
         val post = MomentPost(
             id = UUID.randomUUID().toString(),
@@ -723,7 +740,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             liked = false,
             author = "我",
             aiReacted = false,
-            imageUri = imageUri
+            imageUri = cachedImage
         )
         _momentsPosts.value = _momentsPosts.value + post
         saveMomentsToStorage()
@@ -1024,10 +1041,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendImageMessage(uri: String) {
         val now = System.currentTimeMillis()
+        // 先复制到应用内部存储，退出应用后图片不丢失
+        val cachedUri = ImageCacheHelper.cacheToInternal(getApplication(), uri) ?: uri
         val chatId = _currentChatId.value ?: createNewChat()
         _chats.value.find { it.id == chatId }?.agentId?.takeIf { it.isNotBlank() }
             ?.let { memoryManager.setActiveAgent(it) }
-        val userMessage = Message(content = "", role = Role.USER, imageUri = uri)
+        val userMessage = Message(content = "", role = Role.USER, imageUri = cachedUri)
         val updatedMessages = _currentMessages.value + userMessage
         _currentMessages.value = updatedMessages
         syncChatInList(chatId, "[图片]", updatedMessages)
@@ -1056,7 +1075,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val emotionDesc = "好感度${finalState.affinity}/100·${finalState.mood.label}"
                 val moodDesc = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
                 repository.personaPrompt = buildPersonaPrompt(_chats.value.find { it.id == chatId }?.agentId)
-                val imageDataUrl = readImageAsBase64(uri)
+                val imageDataUrl = readImageAsBase64(cachedUri)
                 val replyFlow = if (imageDataUrl != null) {
                     repository.sendVisionMessageStream(
                         model, apiKey,

@@ -82,6 +82,8 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.wechat.agent.data.EmojiManager
+import com.wechat.agent.data.EmojiSticker
+import com.wechat.agent.data.ImageCacheHelper
 import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.model.Message
@@ -93,6 +95,7 @@ import com.wechat.agent.ui.theme.DarkSelfBubble
 import com.wechat.agent.ui.theme.OtherBubble
 import com.wechat.agent.ui.theme.SelfBubble
 import com.wechat.agent.ui.theme.WeChatGreen
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -131,15 +134,32 @@ fun ChatScreen(
     val settingsManager = remember { SettingsManager.getInstance(context.applicationContext) }
     val advSettings by settingsManager.advancedSettings.collectAsState()
     val emojiManager = remember { EmojiManager(context) }
-    var emojis by remember { mutableStateOf(emojiManager.getAllEmojis()) }
-    var showAddEmojiDialog by remember { mutableStateOf(false) }
-    var newEmojiText by remember { mutableStateOf("") }
+    var stickers by remember { mutableStateOf(emojiManager.getAllStickers()) }
+    var showAddStickerDialog by remember { mutableStateOf(false) }
+    var newStickerName by remember { mutableStateOf("") }
+    var newStickerShortcut by remember { mutableStateOf("") }
+    var pendingStickerPath by remember { mutableStateOf("") }
 
     val imagePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         if (uri != null) {
             onSendImage(uri.toString())
+        }
+    }
+
+    // 新增表情：先选相册图片并缓存到内部存储，再弹窗输入备注名/快捷名
+    val stickerPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            val cached = ImageCacheHelper.cacheToInternal(context, uri.toString())
+            if (cached != null) {
+                pendingStickerPath = cached
+                newStickerName = ""
+                newStickerShortcut = ""
+                showAddStickerDialog = true
+            }
         }
     }
 
@@ -197,6 +217,24 @@ fun ChatScreen(
             Column(
                 modifier = Modifier.imePadding()
             ) {
+                // 输入框上方联想：输入包含表情备注名/快捷名时展示对应图片，点击即发送
+                val matchedStickers = remember(inputText, stickers) {
+                    if (inputText.isBlank()) emptyList()
+                    else stickers.filter {
+                        inputText.contains(it.name) ||
+                            (it.shortcut.isNotEmpty() && inputText.contains(it.shortcut))
+                    }
+                }
+                AnimatedVisibility(visible = matchedStickers.isNotEmpty()) {
+                    StickerSuggestionRow(
+                        stickers = matchedStickers,
+                        onPick = { sticker ->
+                            onSendImage(sticker.imagePath)
+                            inputText = ""
+                            onTypingChange(false)
+                        }
+                    )
+                }
                 if (nowPlaying.title.isNotEmpty()) {
                     MusicControlBar(
                         nowPlaying = nowPlaying,
@@ -234,15 +272,20 @@ fun ChatScreen(
                 )
                 AnimatedVisibility(visible = showEmojiPanel) {
                     EmojiPanel(
-                        emojis = emojis,
-                        onEmojiClick = {
-                            inputText += it
+                        stickers = stickers,
+                        onStickerClick = { sticker ->
+                            onSendImage(sticker.imagePath)
                             showEmojiPanel = false
                         },
-                        onAddEmoji = { showAddEmojiDialog = true },
-                        onRemoveCustom = { emoji ->
-                            emojiManager.removeCustomEmoji(emoji)
-                            emojis = emojiManager.getAllEmojis()
+                        onAddSticker = {
+                            showEmojiPanel = false
+                            stickerPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        onRemoveSticker = { sticker ->
+                            emojiManager.removeSticker(sticker.name)
+                            stickers = emojiManager.getAllStickers()
                         }
                     )
                 }
@@ -288,29 +331,55 @@ fun ChatScreen(
         }
     }
 
-    if (showAddEmojiDialog) {
+    if (showAddStickerDialog) {
         AlertDialog(
-            onDismissRequest = { showAddEmojiDialog = false; newEmojiText = "" },
+            onDismissRequest = { showAddStickerDialog = false; pendingStickerPath = "" },
             title = { Text("新增表情") },
             text = {
-                OutlinedTextField(
-                    value = newEmojiText,
-                    onValueChange = { newEmojiText = it },
-                    placeholder = { Text("输入表情文字或 emoji...") },
-                    singleLine = true
-                )
+                Column {
+                    if (pendingStickerPath.isNotEmpty()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context).data(File(pendingStickerPath)).crossfade(true).build(),
+                            contentDescription = "表情预览",
+                            modifier = Modifier.size(width = 96.dp, height = 96.dp)
+                                .clip(RoundedCornerShape(10.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+                    OutlinedTextField(
+                        value = newStickerName,
+                        onValueChange = { newStickerName = it },
+                        placeholder = { Text("备注名称（聊天输入此名称时展示图片）") },
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newStickerShortcut,
+                        onValueChange = { newStickerShortcut = it },
+                        placeholder = { Text("快捷名称（可选，更短的关键词）") },
+                        singleLine = true
+                    )
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    if (emojiManager.addCustomEmoji(newEmojiText)) {
-                        emojis = emojiManager.getAllEmojis()
+                    if (emojiManager.addSticker(pendingStickerPath, newStickerName, newStickerShortcut)) {
+                        stickers = emojiManager.getAllStickers()
                     }
-                    newEmojiText = ""
-                    showAddEmojiDialog = false
+                    pendingStickerPath = ""
+                    newStickerName = ""
+                    newStickerShortcut = ""
+                    showAddStickerDialog = false
                 }) { Text("添加") }
             },
             dismissButton = {
-                TextButton(onClick = { showAddEmojiDialog = false; newEmojiText = "" }) { Text("取消") }
+                TextButton(onClick = {
+                    showAddStickerDialog = false
+                    pendingStickerPath = ""
+                    newStickerName = ""
+                    newStickerShortcut = ""
+                }) { Text("取消") }
             }
         )
     }
@@ -402,8 +471,9 @@ fun MessageBubble(
             Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
                 modifier = Modifier.widthIn(max = 280.dp)) {
                 if (message.imageUri.isNotEmpty()) {
+                    val imageData: Any = if (message.imageUri.startsWith("/")) File(message.imageUri) else Uri.parse(message.imageUri)
                     AsyncImage(
-                        model = ImageRequest.Builder(context).data(Uri.parse(message.imageUri)).crossfade(true).build(),
+                        model = ImageRequest.Builder(context).data(imageData).crossfade(true).build(),
                         contentDescription = "图片消息",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
@@ -418,14 +488,31 @@ fun MessageBubble(
                     ThinkingBubble(reasoning = message.thinking.orEmpty(), autoCollapsed = autoCollapseThinking, isDark = isDark)
                     Spacer(modifier = Modifier.height(4.dp))
                 }
-                if (message.content.isNotEmpty()) {
+                if (!isUser && parsed != null && parsed.images.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        parsed.images.forEach { s ->
+                            AsyncImage(
+                                model = ImageRequest.Builder(context).data(File(s.imagePath)).crossfade(true).build(),
+                                contentDescription = s.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(140.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                }
+                if ((if (isUser) message.content else parsed?.text ?: message.content).isNotEmpty()) {
                     Box(
                         modifier = Modifier.clip(RoundedCornerShape(
                             topStart = if (isUser) 16.dp else 4.dp, topEnd = if (isUser) 4.dp else 16.dp,
                             bottomStart = 16.dp, bottomEnd = 16.dp))
                             .background(bubbleColor).padding(horizontal = 12.dp, vertical = 8.dp)
                     ) {
-                        Text(message.content, style = MaterialTheme.typography.bodyLarge,
+                        Text(
+                            if (isUser) message.content else parsed?.text ?: message.content,
+                            style = MaterialTheme.typography.bodyLarge,
                             color = if (isUser && !isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface)
                     }
                 }
@@ -607,11 +694,12 @@ private fun PlusMenuPanel(
 
 @Composable
 fun EmojiPanel(
-    emojis: List<String>,
-    onEmojiClick: (String) -> Unit,
-    onAddEmoji: () -> Unit,
-    onRemoveCustom: (String) -> Unit
+    stickers: List<EmojiSticker>,
+    onStickerClick: (EmojiSticker) -> Unit,
+    onAddSticker: () -> Unit,
+    onRemoveSticker: (EmojiSticker) -> Unit
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -625,32 +713,130 @@ fun EmojiPanel(
             Text("表情", style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.weight(1f))
-            TextButton(onClick = onAddEmoji) {
+            TextButton(onClick = onAddSticker) {
                 Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("新增表情", style = MaterialTheme.typography.labelMedium)
+                Text("新增表情（相册选图）", style = MaterialTheme.typography.labelMedium)
             }
         }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(8),
-            modifier = Modifier.fillMaxWidth().height(200.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
-        ) {
-            gridItems(emojis) { emoji ->
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .padding(4.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { onEmojiClick(emoji) }
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(emoji, style = MaterialTheme.typography.bodyLarge)
+        if (stickers.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("暂无表情，点击右上角新增", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(4),
+                modifier = Modifier.fillMaxWidth().height(220.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
+            ) {
+                gridItems(stickers) { sticker ->
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .padding(6.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { onStickerClick(sticker) }
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                    ) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context).data(File(sticker.imagePath)).crossfade(true).build(),
+                            contentDescription = sticker.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp))
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(Color.Black.copy(alpha = 0.6f))
+                                .clickable { onRemoveSticker(sticker) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "删除表情",
+                                tint = Color.White, modifier = Modifier.size(14.dp))
+                        }
+                        Text(
+                            sticker.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .background(Color.Black.copy(alpha = 0.45f))
+                                .padding(horizontal = 4.dp, vertical = 1.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+/** 输入框上方联想条：横向展示命中的表情图片，点击即发送。 */
+@Composable
+private fun StickerSuggestionRow(
+    stickers: List<EmojiSticker>,
+    onPick: (EmojiSticker) -> Unit
+) {
+    val context = LocalContext.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("表情", style = MaterialTheme.typography.labelSmall,
+            color = WeChatGreen.copy(alpha = 0.8f))
+        stickers.forEach { sticker ->
+            Column(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onPick(sticker) },
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context).data(File(sticker.imagePath)).crossfade(true).build(),
+                    contentDescription = sticker.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp))
+                )
+                Text(sticker.name, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    maxLines = 1)
+            }
+        }
+    }
+}
+
+/** 解析大模型回复中的表情标记：[名称] 或 表情:名称，返回清理后的文本与命中的表情列表。 */
+private data class StickerParsed(val text: String, val images: List<EmojiSticker>)
+
+private fun parseStickerContent(content: String, stickers: List<EmojiSticker>): StickerParsed {
+    var text = content
+    val found = mutableListOf<EmojiSticker>()
+    stickers.forEach { s ->
+        val tokens = mutableListOf("[${s.name}]", "表情:${s.name}")
+        if (s.shortcut.isNotEmpty()) {
+            tokens.add("[${s.shortcut}]")
+            tokens.add("表情:${s.shortcut}")
+        }
+        tokens.forEach { token ->
+            if (text.contains(token)) {
+                text = text.replace(token, "")
+                if (!found.any { it.name == s.name }) found.add(s)
+            }
+        }
+    }
+    return StickerParsed(text.trim(), found)
 }
 
 @Composable

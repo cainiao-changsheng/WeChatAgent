@@ -1,54 +1,75 @@
 package com.wechat.agent.data
 
 import android.content.Context
-import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.io.File
 
 /**
- * 表情管理：内置表情列表 + 用户自定义表情，持久化存储
+ * 用户自定义图片表情：从相册选取图片 + 备注名称/快捷名称，保存为 json 文件
+ * （filesDir/emoji_stickers.json），供聊天界面与大模型读取使用。
  */
+data class EmojiSticker(
+    val name: String,          // 备注名称（聊天框/大模型触发用）
+    val shortcut: String = "", // 快捷名称（可选）
+    val imagePath: String      // 图片绝对路径（内部存储，退应用不丢失）
+)
+
 class EmojiManager(context: Context) {
 
-    private val prefs: SharedPreferences = context.getSharedPreferences("emoji_manager", Context.MODE_PRIVATE)
     private val gson = Gson()
+    private val stickersFile: File = File(context.filesDir, "emoji_stickers.json")
 
-    val builtinEmojis = listOf(
-        "😀", "😁", "😂", "🤣", "😊", "😍", "😘", "🥰",
-        "😉", "😎", "🤔", "🤗", "🙄", "😅", "😭", "😢",
-        "😡", "🥺", "😳", "😴", "🤤", "😋", "😜", "🤪",
-        "👍", "👎", "👌", "🙏", "👏", "💪", "🤝", "✌️",
-        "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "💖",
-        "🔥", "✨", "⭐", "🌹", "🎉", "🎂", "💯", "🌙",
-        "☀️", "🌈", "🍀", "🐱", "🐶", "🐰", "🦊", "🐼",
-        "🤙", "🫶", "😤", "😩", "😱", "🤯", "🥳", "😇"
-    )
+    fun getStickersFilePath(): String = stickersFile.absolutePath
 
-    private fun customKey() = "custom_emojis"
-
-    fun getCustomEmojis(): List<String> {
-        val json = prefs.getString(customKey(), null) ?: return emptyList()
+    @Synchronized
+    fun loadStickers(): List<EmojiSticker> {
+        if (!stickersFile.exists()) return emptyList()
         return try {
-            gson.fromJson(json, object : TypeToken<List<String>>() {}.type) ?: emptyList()
-        } catch (_: Exception) { emptyList() }
+            val json = stickersFile.readText()
+            val list = gson.fromJson<List<EmojiSticker>>(
+                json, object : TypeToken<List<EmojiSticker>>() {}.type
+            ) ?: emptyList()
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
-    fun getAllEmojis(): List<String> = builtinEmojis + getCustomEmojis()
+    @Synchronized
+    private fun saveStickers(list: List<EmojiSticker>) {
+        try {
+            stickersFile.parentFile?.mkdirs()
+            stickersFile.writeText(gson.toJson(list))
+        } catch (_: Exception) {}
+    }
 
-    fun addCustomEmoji(emoji: String): Boolean {
-        val trimmed = emoji.trim()
-        if (trimmed.isEmpty()) return false
-        val current = getCustomEmojis().toMutableList()
-        if (current.contains(trimmed)) return false
-        current.add(trimmed)
-        prefs.edit().putString(customKey(), gson.toJson(current)).apply()
+    fun getAllStickers(): List<EmojiSticker> = loadStickers()
+
+    fun addSticker(imagePath: String, name: String, shortcut: String = ""): Boolean {
+        val trimmedName = name.trim()
+        if (trimmedName.isEmpty()) return false
+        val current = loadStickers().toMutableList()
+        if (current.any { it.name == trimmedName }) return false
+        current.add(EmojiSticker(name = trimmedName, shortcut = shortcut.trim(), imagePath = imagePath))
+        saveStickers(current)
         return true
     }
 
-    fun removeCustomEmoji(emoji: String) {
-        val current = getCustomEmojis().toMutableList()
-        if (current.remove(emoji)) {
-            prefs.edit().putString(customKey(), gson.toJson(current)).apply()
+    fun removeSticker(name: String) {
+        val current = loadStickers().toMutableList()
+        if (current.removeAll { it.name == name }) saveStickers(current)
+    }
+
+    /** 供大模型读取的表情 json 内容（名称 + 快捷名 + 图片路径）。 */
+    fun getStickersJson(): String = gson.toJson(loadStickers())
+
+    /** 按名称或快捷名称精确匹配表情。 */
+    fun findSticker(token: String): EmojiSticker? {
+        val key = token.trim()
+        if (key.isEmpty()) return null
+        return loadStickers().firstOrNull {
+            it.name == key || (it.shortcut.isNotEmpty() && it.shortcut == key)
         }
     }
 }
