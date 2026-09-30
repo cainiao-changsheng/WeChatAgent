@@ -315,7 +315,7 @@ fun ChatScreen(
                     emojiSelected = showEmojiPanel,
                     plusMenuExpanded = plusMenuExpanded,
                     onPlusMenuChange = { plusMenuExpanded = it },
-                    enabled = !isLoading
+                    enabled = true // 回复期间不锁定输入：发新消息即打断当前生成（sendMessage 会 cancel 旧 streamingJob）
                 )
                 AnimatedVisibility(visible = showEmojiPanel) {
                     EmojiPanel(

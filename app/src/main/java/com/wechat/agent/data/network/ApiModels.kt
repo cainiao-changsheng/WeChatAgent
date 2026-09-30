@@ -77,7 +77,16 @@ data class Choice(
 data class Delta(
     val role: String? = null,
     val content: String? = null,
-    val reasoning_content: String? = null
+    val reasoning_content: String? = null,
+    @SerializedName("tool_calls") val toolCalls: List<DeltaToolCall>? = null
+)
+
+/** 流式工具调用增量片段（SSE delta.tool_calls 元素，按 index 聚合出完整 ToolCall）。 */
+data class DeltaToolCall(
+    val index: Int = 0,
+    val id: String? = null,
+    val type: String? = null,
+    val function: FunctionCall? = null
 )
 
 data class ApiError(

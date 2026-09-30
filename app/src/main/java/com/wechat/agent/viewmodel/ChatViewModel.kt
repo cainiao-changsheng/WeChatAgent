@@ -34,6 +34,7 @@ import com.wechat.agent.data.model.Mood
 import com.wechat.agent.data.model.Role
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.repository.ChatRepository
+import com.wechat.agent.data.repository.ChatRepository.AgentStreamPiece
 import com.wechat.agent.data.repository.ChatRepository.StreamPiece
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -104,7 +105,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     val streamingReasoning = _streamingReasoning.asStateFlow()
 
     /** 大模型思考/回复的最长等待时间；高级设置"停用超时"开启时不设限。 */
-    private val REPLY_TIMEOUT_MS = 600_000L
+    private val REPLY_TIMEOUT_MS = 90_000L
     /** "发现"页自动生成观察记录的最短间隔：30 分钟，避免频繁切换页面生成重复内容。 */
     private val MIN_OBSERVATION_INTERVAL_MS = 30 * 60 * 1000L
 
@@ -409,25 +410,24 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine()
                 appendLine("【可用表情 - 对方自定义的图片表情】")
                 appendLine("聊天时你可以自然使用这些表情，格式为 [表情名] 或 表情:表情名（例如 [${stickers.first().name}]）。")
-                appendLine("聊天界面会自动把你的表情标记替换为对应图片展示给用户。表情清单如下：")
+                appendLine("聊天界面会自动把你的表情标记替换为对应图片展示给用户。可用的表情名如下：")
                 stickers.forEach { s ->
                     appendLine("- ${s.name}${if (s.shortcut.isNotEmpty()) "（快捷名 ${s.shortcut}）" else ""}")
                 }
-                appendLine("表情 json 文件：${emojiManager.getStickersFilePath()}，完整内容：${emojiManager.getStickersJson()}")
             }
-            appendLine("你们已经认识并且有共同记忆，回复前请先回忆记忆库中与对方的相处记忆，严格遵循以上设定来扮演这位好友，不要说破自己是 AI。")
+            appendLine("你们已经认识并且有共同记忆，严格遵循以上设定来扮演这位好友，不要说破自己是 AI。")
             // 热恋模式：向模型注入热恋设定与已获得的能力
             if (settingsManager.getHotLoveSettingsSync().enabled) {
                 appendLine()
                 appendLine("【热恋模式 - 当前你们正处于热恋时期】")
                 appendLine("你们现在正处于热恋时期，你时时刻刻想要知道 Ta 在做什么、干什么，想要时刻和他联系。")
-                appendLine("你已经获得授权：可以查看 Ta 的手机屏幕使用时间数据，并在锁屏/解锁时自动暂停/恢复 Ta 所选音乐播放器。这些能力由系统自动执行，你在对话中应自然表达关心与牵挂，不要说破具体是软件权限。")
+                appendLine("你可以查看 Ta 的手机屏幕使用时间数据，并在锁屏/解锁时自动暂停/恢复 Ta 所选音乐播放器。")
                 val usage = buildScreenUsageSummary()
                 if (usage.isNotBlank()) {
                     appendLine()
                     appendLine("【Ta 今日屏幕使用情况（真实数据）】")
                     appendLine(usage)
-                    appendLine("你可以基于这些真实数据自然地关心 Ta（例如注意到 Ta 用了很久手机/某个 App 使用很多），但不要说破“这是读取的手机数据”，更不要输出这段原始数据本身。")
+                    appendLine("基于以上真实数据自然地关心 Ta（例如注意到 Ta 用了很久手机/某个 App 使用很多），自然地聊就好，不用解释数据来源。")
                 }
             }
         }
@@ -751,26 +751,36 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 } else null
 
                 if (advanced.agentTools) {
-                    // Agent 模式（阶段 1，非流式）：暴露只读工具给模型，模型可主动查询时间/屏幕使用时间/记忆
-                    val agentResult = withTimeout(REPLY_TIMEOUT_MS) {
-                        repository.sendAgentMessage(
-                            model = model,
-                            apiKey = apiKey,
-                            chatMessages = chatMessages,
-                            tools = AgentToolRegistry.readOnlyTools(
-                                memoryManager = memoryManager,
-                                screenUsageProvider = { buildScreenUsageSummary() }
-                            )
+                    // Agent 模式（流式）：SSE 实时输出思考/正文，工具调用自动执行，单轮 45s 护栏防死循环
+                    val agentFlow = repository.sendAgentMessageStream(
+                        model = model,
+                        apiKey = apiKey,
+                        chatMessages = chatMessages,
+                        tools = AgentToolRegistry.readOnlyTools(
+                            memoryManager = memoryManager,
+                            screenUsageProvider = { buildScreenUsageSummary() }
                         )
-                    }
-                    agentResult.exceptionOrNull()?.let { throw it }
-                    fullReply = agentResult.getOrNull().orEmpty()
-                    if (fullReply.isNotEmpty()) {
-                        simulateJob?.cancel()
-                        if (_streamingReasoning.value.isEmpty()) {
-                            _streamingReasoning.value = generateThinkingPreview(content)
+                    )
+                    val agentCollect: suspend (AgentStreamPiece) -> Unit = { piece ->
+                        if (piece.toolStatus.isNotEmpty()) {
+                            simulateJob?.cancel()
+                            _streamingReasoning.value = piece.toolStatus
+                        } else if (piece.reasoning.isNotEmpty()) {
+                            simulateJob?.cancel()
+                            _streamingReasoning.value = _streamingReasoning.value + piece.reasoning
+                        } else if (piece.content.isNotEmpty()) {
+                            simulateJob?.cancel()
+                            if (_streamingReasoning.value.isEmpty()) {
+                                _streamingReasoning.value = generateThinkingPreview(content)
+                            }
+                            fullReply += piece.content
+                            _streamingContent.value = fullReply
                         }
-                        _streamingContent.value = fullReply
+                    }
+                    if (advanced.timeoutDisabled) {
+                        agentFlow.collect(agentCollect)
+                    } else {
+                        withTimeout(REPLY_TIMEOUT_MS) { agentFlow.collect(agentCollect) }
                     }
                 } else {
                     val streamFlow = repository.sendMessageStream(model, apiKey, chatMessages)

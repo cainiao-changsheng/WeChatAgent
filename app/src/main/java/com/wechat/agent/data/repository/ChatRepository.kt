@@ -5,7 +5,11 @@ import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.agent.AgentToolSpec
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.network.ChatRequest
+import com.wechat.agent.data.network.DeltaToolCall
+import com.wechat.agent.data.network.FunctionCall
 import com.wechat.agent.data.network.RetrofitClient
+import com.wechat.agent.data.network.StreamChunk
+import com.wechat.agent.data.network.ToolCall
 import com.wechat.agent.data.network.VisionChatRequest
 import com.wechat.agent.data.network.VisionContent
 import com.wechat.agent.data.network.VisionMessage
@@ -14,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withTimeout
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -29,6 +34,8 @@ class ChatRepository(private val memoryManager: MemoryManager) {
     /** Agent 执行最大轮数（含工具调用轮），防止死循环。 */
     companion object {
         const val MAX_AGENT_ROUNDS = 6
+        /** 单轮请求（含读流）超时护栏：防止工具循环单轮无响应卡死 UI。 */
+        const val ROUND_TIMEOUT_MS = 45_000L
     }
 
     suspend fun buildChatMessages(
@@ -218,6 +225,179 @@ class ChatRepository(private val memoryManager: MemoryManager) {
             Result.failure(Exception(networkErrorMessage(e), e))
         }
     }
+
+    /** Agent 流式片段：思考（reasoning）、正文（content）、工具执行状态（toolStatus）。 */
+    data class AgentStreamPiece(
+        val reasoning: String = "",
+        val content: String = "",
+        val toolStatus: String = ""
+    )
+
+    /** Agent 工具执行状态文案。 */
+    private fun agentToolLabel(name: String): String = when (name) {
+        "get_current_time" -> "正在查看时间…"
+        "query_screen_time" -> "正在查看屏幕使用时间…"
+        "recall_memory" -> "正在回忆与你的记忆…"
+        else -> "正在执行 $name…"
+    }
+
+    /**
+     * Agent 模式流式发送（SSE）：实时输出思考/正文，模型发起工具调用时自动执行并进入下一轮；
+     * 每轮有 ROUND_TIMEOUT_MS（45s）护栏，杜绝工具循环把 UI 锁死。
+     */
+    fun sendAgentMessageStream(
+        model: String,
+        apiKey: String,
+        chatMessages: List<ChatMessage>,
+        tools: List<AgentToolSpec>
+    ): Flow<AgentStreamPiece> = flow {
+        if (tools.isEmpty()) {
+            sendMessageStream(model, apiKey, chatMessages).collect { piece ->
+                if (piece.reasoning.isNotEmpty()) emit(AgentStreamPiece(reasoning = piece.reasoning))
+                if (piece.content.isNotEmpty()) emit(AgentStreamPiece(content = piece.content))
+            }
+            return@flow
+        }
+        val messages = chatMessages.toMutableList()
+        val supportsTools = !toolsUnsupportedModels.contains(model)
+        val gson = com.google.gson.Gson()
+        var lastText = ""
+        try {
+            for (round in 0 until MAX_AGENT_ROUNDS) {
+                var textThisRound = ""
+                val toolCalls = try {
+                    withTimeout(ROUND_TIMEOUT_MS) {
+                        val request = ChatRequest(
+                            model = model,
+                            messages = messages,
+                            stream = true,
+                            tools = if (supportsTools) tools.map { it.toChatTool() } else null
+                        )
+                        val response = RetrofitClient.getApiService().sendMessageStream(
+                            authorization = "Bearer $apiKey",
+                            request = request
+                        )
+                        if (!response.isSuccessful) {
+                            // 带 tools 被拒且此前未标记：标记并降级纯文本流式
+                            if (supportsTools && response.code() == 400) {
+                                toolsUnsupportedModels.add(model)
+                                AppLogger.log("ChatRepository", "模型 $model 不支持 tools，降级纯文本流式")
+                                sendMessageStream(model, apiKey, messages).collect { piece ->
+                                    if (piece.reasoning.isNotEmpty()) emit(AgentStreamPiece(reasoning = piece.reasoning))
+                                    if (piece.content.isNotEmpty()) emit(AgentStreamPiece(content = piece.content))
+                                }
+                                return@withTimeout emptyList<ToolCall>()
+                            }
+                            throw ApiRequestException(response.code(), apiErrorMessage(response.code()))
+                        }
+
+                        val responseBody = response.body()
+                            ?: throw Exception("服务器未返回流式响应")
+                        val reader = BufferedReader(InputStreamReader(responseBody.byteStream()))
+                        val toolAccum = LinkedHashMap<Int, DeltaToolCall>()
+                        val currentContent = StringBuilder()
+                        val currentReasoning = StringBuilder()
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            val currentLine = line ?: continue
+                            if (!currentLine.startsWith("data: ")) continue
+                            val data = currentLine.removePrefix("data: ").trim()
+                            if (data == "[DONE]") break
+                            try {
+                                val chunk = gson.fromJson(data, StreamChunk::class.java)
+                                val delta = chunk.choices?.firstOrNull()?.delta ?: continue
+                                delta.reasoning_content?.let { r ->
+                                    if (r.isNotEmpty()) {
+                                        currentReasoning.append(r)
+                                        emit(AgentStreamPiece(reasoning = r))
+                                    }
+                                }
+                                delta.content?.let { c ->
+                                    if (c.isNotEmpty()) {
+                                        currentContent.append(c)
+                                        emit(AgentStreamPiece(content = c))
+                                    }
+                                }
+                                delta.toolCalls?.forEach { dtc ->
+                                    val prev = toolAccum[dtc.index] ?: DeltaToolCall(index = dtc.index)
+                                    toolAccum[dtc.index] = prev.copy(
+                                        id = dtc.id ?: prev.id,
+                                        type = dtc.type ?: prev.type,
+                                        function = FunctionCall(
+                                            name = dtc.function?.name ?: prev.function?.name,
+                                            arguments = (prev.function?.arguments ?: "") + (dtc.function?.arguments ?: "")
+                                        )
+                                    )
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        reader.close()
+
+                        textThisRound = currentContent.toString()
+                        if (textThisRound.isNotBlank()) lastText = textThisRound
+                        toolAccum.values
+                            .filter { it.function?.name?.isNotBlank() == true }
+                            .map { ToolCall(id = it.id, type = it.type, function = it.function) }
+                    }
+                } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                    AppLogger.log("ChatRepository", "Agent 单轮响应超时（45s 护栏触发）")
+                    if (lastText.isBlank()) throw Exception("AI 响应超时，请稍后再试")
+                    return@flow
+                }
+
+                if (toolCalls.isEmpty()) {
+                    // 模型已给出最终文本（正文已实时 emit）
+                    return@flow
+                }
+
+                // 回填 assistant 消息（保留 tool_calls，供模型看到自己调用了什么）
+                messages.add(ChatMessage(
+                    role = "assistant",
+                    content = textThisRound.ifEmpty { null },
+                    toolCalls = toolCalls
+                ))
+
+                // 逐个执行工具并回填 role=tool 结果
+                for (toolCall in toolCalls) {
+                    val name = toolCall.function?.name ?: continue
+                    val argsJson = toolCall.function?.arguments ?: "{}"
+                    emit(AgentStreamPiece(toolStatus = agentToolLabel(name)))
+                    val args: Map<String, Any?> = try {
+                        gson.fromJson(argsJson, Map::class.java) as? Map<String, Any?>
+                            ?: emptyMap()
+                    } catch (_: Exception) {
+                        emptyMap()
+                    }
+                    val spec = tools.find { it.name == name }
+                    val result = if (spec != null) {
+                        try {
+                            spec.executor(args)
+                        } catch (e: Exception) {
+                            "工具执行失败: ${e.message ?: e.javaClass.simpleName}"
+                        }
+                    } else {
+                        "未找到工具 $name"
+                    }
+                    messages.add(ChatMessage(
+                        role = "tool",
+                        content = result,
+                        toolCallId = toolCall.id
+                    ))
+                }
+                if (round == MAX_AGENT_ROUNDS - 1) {
+                    AppLogger.log("ChatRepository", "Agent 达到最大轮数 $MAX_AGENT_ROUNDS，以最后文本收尾")
+                }
+            }
+
+            // 达到最大轮数仍未完成（正文每轮已实时输出，无需重复 emit）
+            if (lastText.isBlank()) throw Exception("AI 未返回有效回复")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            AppLogger.log("ChatRepository", "Agent 流式请求异常: ${e.javaClass.simpleName}")
+            throw Exception(networkErrorMessage(e), e)
+        }
+    }.flowOn(Dispatchers.IO)
 
     /** 多模态消息发送：携带 text + 图片（data URL），用于朋友圈识图回复。 */
     suspend fun sendVisionMessage(
