@@ -435,7 +435,7 @@ private fun loadMusicApps(context: Context): List<MusicAppInfo> {
         val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MUSIC)
         pm.queryIntentActivities(intent, 0).forEach { ri ->
             val pkg = ri.activityInfo.packageName
-            result[pkg] = pm.getApplicationInfo(pkg).loadLabel(pm).toString()
+            result[pkg] = pm.getApplicationInfo(pkg, 0).loadLabel(pm).toString()
         }
     } catch (_: Exception) {}
 
