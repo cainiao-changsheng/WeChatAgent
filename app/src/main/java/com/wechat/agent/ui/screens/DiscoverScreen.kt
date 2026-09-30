@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wechat.agent.data.AgentProfile
 import com.wechat.agent.data.ObservationEntry
+import com.wechat.agent.ui.components.CenteredTopBar
 import com.wechat.agent.ui.theme.WeChatGreen
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -81,91 +82,92 @@ fun DiscoverScreen(
 
     Scaffold(
         topBar = {
-            // 顶部栏：左侧好友下拉菜单 + 标题 + 右侧记录按钮
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // 左侧弹出式下拉菜单：好友列表
-                Box {
+            // 顶部栏：左侧好友下拉菜单 + 标题 + 右侧记录按钮（与其它导航页顶部栏对齐）
+            CenteredTopBar(
+                fullWidthContent = {
                     Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                            .clickable { menuExpanded = true }
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            selectedProfile?.name ?: "选择好友",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Medium,
-                            color = if (selectedProfile != null) MaterialTheme.colorScheme.onSurface
-                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                        Icon(
-                            Icons.Default.ArrowDropDown,
-                            contentDescription = "好友列表",
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = menuExpanded,
-                        onDismissRequest = { menuExpanded = false }
-                    ) {
-                        profiles.forEach { p ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(p.name, fontWeight = if (p.id == selectedAgentId) FontWeight.Medium else FontWeight.Normal)
-                                },
-                                onClick = {
-                                    selectedAgentId = p.id
-                                    menuExpanded = false
+                        // 左侧弹出式下拉菜单：好友列表
+                        Box {
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                    .clickable { menuExpanded = true }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    selectedProfile?.name ?: "选择好友",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (selectedProfile != null) MaterialTheme.colorScheme.onSurface
+                                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                )
+                                Icon(
+                                    Icons.Default.ArrowDropDown,
+                                    contentDescription = "好友列表",
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = menuExpanded,
+                                onDismissRequest = { menuExpanded = false }
+                            ) {
+                                profiles.forEach { p ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(p.name, fontWeight = if (p.id == selectedAgentId) FontWeight.Medium else FontWeight.Normal)
+                                        },
+                                        onClick = {
+                                            selectedAgentId = p.id
+                                            menuExpanded = false
+                                        }
+                                    )
                                 }
+                                if (profiles.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("暂无好友", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) },
+                                        onClick = { menuExpanded = false }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("发现", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                            Text(
+                                "全知全能的观察者 · 仅记录客观行为",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = WeChatGreen.copy(alpha = 0.8f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
-                        if (profiles.isEmpty()) {
-                            DropdownMenuItem(
-                                text = { Text("暂无好友", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)) },
-                                onClick = { menuExpanded = false }
-                            )
+
+                        TextButton(
+                            onClick = { selectedProfile?.let { onRecord(it.id, it.name) } },
+                            enabled = selectedProfile != null && !generating
+                        ) {
+                            if (generating) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.width(16.dp).height(16.dp),
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("记录中", style = MaterialTheme.typography.labelMedium)
+                            } else {
+                                Icon(Icons.Default.RecordVoiceOver, contentDescription = null, modifier = Modifier.width(16.dp).height(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("记录", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     }
                 }
-
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("发现", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(
-                        "全知全能的观察者 · 仅记录客观行为",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = WeChatGreen.copy(alpha = 0.8f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                TextButton(
-                    onClick = { selectedProfile?.let { onRecord(it.id, it.name) } },
-                    enabled = selectedProfile != null && !generating
-                ) {
-                    if (generating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.width(16.dp).height(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("记录中", style = MaterialTheme.typography.labelMedium)
-                    } else {
-                        Icon(Icons.Default.RecordVoiceOver, contentDescription = null, modifier = Modifier.width(16.dp).height(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("记录", style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
+            )
         },
         bottomBar = bottomBar
     ) { padding ->
