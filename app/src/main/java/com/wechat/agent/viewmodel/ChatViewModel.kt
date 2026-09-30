@@ -13,6 +13,7 @@ import com.wechat.agent.data.MomentsGenerator
 import com.wechat.agent.data.LifeDecisionEngine
 import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.ObservationEntry
+import com.wechat.agent.data.ObservationStore
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.TypingHabitTracker
 import com.wechat.agent.data.model.AgentStatus
