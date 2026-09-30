@@ -58,6 +58,7 @@ import androidx.core.graphics.drawable.IconCompat
 import com.wechat.agent.data.AdvancedSettings
 import com.wechat.agent.ui.components.CenteredTopBar
 import com.wechat.agent.viewmodel.SettingsViewModel
+import kotlinx.coroutines.launch
 
 /** 参考图配色：紫色强调 + 粉色按钮 */
 private val AccentPurple = Color(0xFF9C6BFF)

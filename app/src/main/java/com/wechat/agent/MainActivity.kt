@@ -271,6 +271,7 @@ fun AppNavigation() {
                 onEditProfile = { navController.navigate("editProfile") },
                 onOpenMoments = { navigateToTab(navController, "moments") },
                 onOpenSettings = { navController.navigate("settingsDetail") },
+                onOpenAdvanced = { navController.navigate("advanced") },
                 bottomBar = {
                     WeChatBottomBar(
                         currentRoute = currentRoute,
