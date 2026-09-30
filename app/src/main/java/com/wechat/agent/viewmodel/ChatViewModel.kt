@@ -12,6 +12,7 @@ import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.data.MomentsGenerator
 import com.wechat.agent.data.LifeDecisionEngine
 import com.wechat.agent.data.MusicController
+import com.wechat.agent.data.ObservationEntry
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.TypingHabitTracker
 import com.wechat.agent.data.model.AgentStatus
@@ -58,6 +59,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val momentsGenerator = MomentsGenerator(memoryManager)
     private val decisionEngine = LifeDecisionEngine(memoryManager)
     private val emojiManager = EmojiManager(application)
+    private val observationStore = ObservationStore(application)
     private val gson = Gson()
 
     // 各角色独立的数据文件（默认角色使用旧文件兼容历史数据）
@@ -102,6 +104,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _momentsPosts = MutableStateFlow<List<MomentPost>>(emptyList())
     val momentsPosts = _momentsPosts.asStateFlow()
+
+    /** "发现"页：当前选中好友的客观行为观察记录（时间倒序，最新在上） */
+    private val _observations = MutableStateFlow<List<ObservationEntry>>(emptyList())
+    val observations = _observations.asStateFlow()
+
+    private val _generatingObservation = MutableStateFlow(false)
+    val generatingObservation = _generatingObservation.asStateFlow()
 
     private val _agentStatus = MutableStateFlow(AgentStatus())
     val agentStatus = _agentStatus.asStateFlow()
@@ -708,6 +717,62 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun skipPrevMusic() { try { musicController.skipPrevious() } catch (_: Exception) {} }
     fun openMusicApp() { try { musicController.openMusicApp() } catch (_: Exception) {} }
     fun refreshNowPlaying() { try { _nowPlaying.value = musicController.getNowPlaying() } catch (_: Exception) {} }
+
+    /** "发现"页：加载选中好友的历史观察记录（时间倒序）。 */
+    fun loadObservations(agentId: String) {
+        if (agentId.isBlank()) return
+        _observations.value = observationStore.getObservations(agentId)
+    }
+
+    /**
+     * "发现"页：以"全知全能的观察者"视角生成一条好友客观行为记录。
+     * 大模型只记录客观行为，不记录心理活动和想法；未配置 API Key 时使用本地兜底描述。
+     */
+    fun recordObservation(agentId: String, agentName: String) {
+        if (agentId.isBlank() || _generatingObservation.value) return
+        viewModelScope.launch {
+            _generatingObservation.value = true
+            try {
+                val apiKey = settingsManager.apiKey.first()
+                val model = settingsManager.modelName.first()
+                val behavior = if (apiKey.isNotEmpty()) {
+                    val profile = settingsManager.agentProfiles.value.find { it.id == agentId }
+                    val prompt = buildString {
+                        appendLine("你是全知全能的观察者。请用简洁的中文记录「${profile?.name ?: agentName}」当前时间戳下的客观行为。")
+                        appendLine("要求：")
+                        appendLine("1. 只记录可观察的客观行为（正在做什么、处于什么状态、与谁互动等），禁止记录任何心理活动、情绪、想法或内心状态。")
+                        appendLine("2. 第一句话直接描述行为，不要任何解释、前缀或评价。")
+                        appendLine("3. 控制在 80 字以内。")
+                    }
+                    runCatching {
+                        repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt)))
+                    }.getOrDefault("")
+                } else {
+                    val fallbacks = listOf(
+                        "安静地待在自己的房间里",
+                        "正在翻阅手机",
+                        "在整理桌面上的物品",
+                        "刚刚结束一段对话",
+                        "注视着窗外发呆"
+                    )
+                    fallbacks[Random.nextInt(fallbacks.size)]
+                }
+                val cleaned = behavior.trim().ifBlank { "保持安静" }
+                val entry = ObservationEntry(
+                    id = UUID.randomUUID().toString(),
+                    agentId = agentId,
+                    agentName = agentName,
+                    timestamp = System.currentTimeMillis(),
+                    behavior = cleaned
+                )
+                _observations.value = observationStore.addObservation(entry)
+            } catch (_: Exception) {
+                _observations.value = observationStore.getObservations(agentId)
+            } finally {
+                _generatingObservation.value = false
+            }
+        }
+    }
     fun searchAndPlaySong(query: String) { try { musicController.searchSong(query) } catch (_: Exception) {} }
     fun toggleLike(postId: String) {
         _momentsPosts.value = _momentsPosts.value.map {

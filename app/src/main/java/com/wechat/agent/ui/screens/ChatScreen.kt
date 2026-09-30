@@ -1,6 +1,7 @@
 package com.wechat.agent.ui.screens
 
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,6 +41,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.LocationOn
@@ -166,6 +169,47 @@ fun ChatScreen(
         }
     }
 
+    // 导入表情包：选择 zip（参考格式 custom_stickers.json + 图片），解压并逐个添加
+    val importZipLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val result = runCatching {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    emojiManager.importFromZip(input)
+                }
+            }.getOrNull()
+            stickers = emojiManager.getAllStickers()
+            if (result != null) {
+                Toast.makeText(
+                    context,
+                    "导入完成：成功 ${result.first} 个，跳过 ${result.second} 个",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                Toast.makeText(context, "导入失败，请选择格式正确的表情包 zip", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // 导出表情包：选择保存位置，写入参考格式 zip（custom_stickers.json + 图片）
+    val exportZipLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/zip")
+    ) { uri ->
+        if (uri != null) {
+            val ok = runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { output ->
+                    emojiManager.exportToZip(output)
+                } ?: false
+            }.getOrDefault(false)
+            Toast.makeText(
+                context,
+                if (ok) "表情包已导出" else "导出失败（暂无表情可导出）",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     LaunchedEffect(messages.size, streamingContent, streamingReasoning) {
         if (messages.isNotEmpty() || streamingContent.isNotEmpty() || streamingReasoning.isNotEmpty()) {
             listState.animateScrollToItem(maxOf(0, messages.size))
@@ -285,6 +329,12 @@ fun ChatScreen(
                             stickerPicker.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                             )
+                        },
+                        onImportStickers = {
+                            importZipLauncher.launch(arrayOf("application/zip"))
+                        },
+                        onExportStickers = {
+                            exportZipLauncher.launch("stickers_${System.currentTimeMillis()}.zip")
                         },
                         onRemoveSticker = { sticker ->
                             emojiManager.removeSticker(sticker.name)
@@ -505,7 +555,7 @@ fun MessageBubble(
                                 contentDescription = s.name,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .size(140.dp)
+                                    .size(200.dp)
                                     .clip(RoundedCornerShape(12.dp))
                             )
                         }
@@ -706,6 +756,8 @@ fun EmojiPanel(
     stickers: List<EmojiSticker>,
     onStickerClick: (EmojiSticker) -> Unit,
     onAddSticker: () -> Unit,
+    onImportStickers: () -> Unit,
+    onExportStickers: () -> Unit,
     onRemoveSticker: (EmojiSticker) -> Unit
 ) {
     val context = LocalContext.current
@@ -722,10 +774,20 @@ fun EmojiPanel(
             Text("表情", style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             Spacer(modifier = Modifier.weight(1f))
+            TextButton(onClick = onImportStickers) {
+                Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("导入", style = MaterialTheme.typography.labelMedium)
+            }
+            TextButton(onClick = onExportStickers) {
+                Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("导出", style = MaterialTheme.typography.labelMedium)
+            }
             TextButton(onClick = onAddSticker) {
                 Icon(Icons.Default.AddCircleOutline, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("新增表情（相册选图）", style = MaterialTheme.typography.labelMedium)
+                Text("新增表情", style = MaterialTheme.typography.labelMedium)
             }
         }
         if (stickers.isEmpty()) {

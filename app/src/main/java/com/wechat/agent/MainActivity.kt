@@ -24,6 +24,7 @@ import com.wechat.agent.ui.screens.ChatListScreen
 import com.wechat.agent.ui.screens.ChatScreen
 import com.wechat.agent.ui.screens.ComposeMomentScreen
 import com.wechat.agent.ui.screens.ContactsScreen
+import com.wechat.agent.ui.screens.DiscoverScreen
 import com.wechat.agent.ui.screens.EditProfileScreen
 import com.wechat.agent.ui.screens.LabScreen
 import com.wechat.agent.ui.screens.ModelConfigScreen
@@ -72,6 +73,8 @@ fun AppNavigation() {
     val agentGlobalSettings by settingsViewModel.agentGlobalSettings.collectAsState()
     val nowPlaying by chatViewModel.nowPlaying.collectAsState()
     val momentPosts by chatViewModel.momentsPosts.collectAsState()
+    val observations by chatViewModel.observations.collectAsState()
+    val generatingObservation by chatViewModel.generatingObservation.collectAsState()
     val agentProfiles by settingsViewModel.agentProfiles.collectAsState()
     val currentAgentId by settingsViewModel.currentAgentId.collectAsState()
     val backupConfig by settingsViewModel.backupConfig.collectAsState()
@@ -260,6 +263,22 @@ fun AppNavigation() {
                 onPublish = { content, imageUri ->
                     chatViewModel.postUserMoment(content, imageUri)
                     navController.popBackStack()
+                }
+            )
+        }
+
+        composable("discover") {
+            DiscoverScreen(
+                profiles = agentProfiles,
+                observations = observations,
+                generating = generatingObservation,
+                onRefresh = { agentId -> chatViewModel.loadObservations(agentId) },
+                onRecord = { agentId, agentName -> chatViewModel.recordObservation(agentId, agentName) },
+                bottomBar = {
+                    WeChatBottomBar(
+                        currentRoute = currentRoute,
+                        onTabSelected = { route -> navigateToTab(navController, route) }
+                    )
                 }
             )
         }
