@@ -140,11 +140,14 @@ fun ChatListScreen(
                     val chatTitle = chat.agentId.takeIf { it.isNotBlank() }
                         ?.let { aid -> profiles.firstOrNull { it.id == aid }?.name }
                         ?: chat.title
+                    // 全局列表：每个会话显示其归属好友的头像
+                    val chatProfile = chat.agentId.takeIf { it.isNotBlank() }
+                        ?.let { aid -> profiles.firstOrNull { it.id == aid } }
                     ChatListItem(
                         chat = chat,
                         titleOverride = chatTitle,
-                        agentAvatar = agentAvatar,
-                        agentAvatarUri = agentAvatarUri,
+                        agentAvatar = chatProfile?.avatar ?: agentAvatar,
+                        agentAvatarUri = chatProfile?.avatarUri ?: agentAvatarUri,
                         onClick = { onChatClick(chat.id) },
                         onLongClick = { showDeleteDialog = chat.id }
                     )

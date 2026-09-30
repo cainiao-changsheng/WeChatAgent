@@ -2,6 +2,15 @@
 
 > 本文档记录每次版本更新的内容与实现方法，仅供开发追溯，不打包进 App。
 
+## v1.0.14（2026-09-30）聊天列表全局共享，彻底解决跨好友串号
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 修复：聊天列表改为全局共享，不再按角色隔离 | 根因：v1.0.13 及之前 `chatPrefs` 按 `chat_sessions_<agentId>` 隔离，切换角色时 `bindAgent`/`switchBindingPreservingChat` 会整体换掉聊天列表，导致“李依娜的会话在切到林晚舟后消失/回复收不到”。修复：`ChatViewModel` 的 `chatPrefs` 固定指向全局 `chat_sessions`，`bindAgent`/`switchBindingPreservingChat` 只切换 `momentsPrefs`/`statusPrefs`（朋友圈/状态/情绪仍按角色隔离），不再切换聊天 prefs 与列表 |
+| 2 | 修复：选中任意好友会话自动切换该好友设定回复 | `selectChat` 已带防御：会话 `agentId` 与当前角色不符时先切到该角色绑定（记忆/人设/情绪），再展示消息；`sendMessage` 按会话 `agentId` 构建 `personaPrompt`，保证回复人设正确 |
+| 3 | 兼容：自动合并历史按角色隔离的聊天记录 | 新增 `migrateLegacyChatsToGlobal()`：init 时读取各角色 `chat_sessions_<agentId>` 的旧会话并入全局 `chat_sessions`（按 id 去重，`migrated_global_chats` 标记只跑一次），升级不丢历史 |
+| 4 | 界面：全局聊天列表按会话显示对应好友头像 | `ChatListScreen` 按 `chat.agentId` 查找 `AgentProfile` 头像/昵称渲染，不再统一使用当前角色头像 |
+
 ## v1.0.13（2026-09-30）调试能力与跨角色串号修复
 
 | # | 更新内容 | 实现方法 |

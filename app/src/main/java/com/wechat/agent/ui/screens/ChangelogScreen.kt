@@ -70,6 +70,15 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.14",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "修复：聊天列表改为全局共享，多名好友会话同时显示不串号",
+                        "修复：选中任意好友会话时自动切换该好友的记忆/人设/情绪回复",
+                        "兼容：升级后自动合并历史按角色隔离的聊天记录"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.13",
                     date = "2026-09-30",
                     items = listOf(

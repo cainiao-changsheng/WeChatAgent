@@ -68,6 +68,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val gson = Gson()
 
     // 各角色独立的数据文件（默认角色使用旧文件兼容历史数据）
+    // 注意：聊天列表（chat_sessions）改为全局共享，不再按角色隔离，
+    // 每个会话通过 agentId 字段标记归属好友；切换好友时列表保持完整，
+    // 选中会话后自动切换到对应角色的记忆/人设/情绪。
     private var currentAgentId: String = SettingsManager.DEFAULT_AGENT_ID
     private var chatPrefs: SharedPreferences = application.getSharedPreferences("chat_sessions", 0)
     private var momentsPrefs: SharedPreferences = application.getSharedPreferences("moments", 0)
@@ -137,6 +140,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var lastBackupAt: Long = 0
 
     init {
+        // 一次性迁移：v1.0.13 及之前聊天列表按角色隔离（chat_sessions_<agentId>），
+        // 现改为全局共享（chat_sessions），合并历史会话避免升级后列表丢失。
+        migrateLegacyChatsToGlobal()
         // 先以默认角色初始化，随后按当前选中角色切换加载
         bindAgent(SettingsManager.DEFAULT_AGENT_ID, apply = true)
         viewModelScope.launch {
@@ -145,6 +151,32 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             repository.formatRule = typingTracker.getFormatRule()
         }
         try { musicController.connect() } catch (_: Exception) {}
+    }
+
+    /** 将旧版按角色隔离的聊天记录合并进全局 chat_sessions（仅执行一次）。 */
+    private fun migrateLegacyChatsToGlobal() {
+        try {
+            val global = getApplication<Application>().getSharedPreferences("chat_sessions", 0)
+            if (global.getBoolean("migrated_global_chats", false)) return
+            val merged = LinkedHashMap<String, Chat>()
+            fun absorb(json: String?) {
+                if (json.isNullOrBlank()) return
+                runCatching {
+                    gson.fromJson<List<Chat>>(json, object : TypeToken<List<Chat>>() {}.type)
+                }.getOrNull()?.forEach { c -> merged[c.id] = c }
+            }
+            absorb(global.getString("chats", null))
+            for (p in settingsManager.agentProfiles.value) {
+                if (p.id == SettingsManager.DEFAULT_AGENT_ID) continue
+                val pfs = getApplication<Application>().getSharedPreferences("chat_sessions_${p.id}", 0)
+                absorb(pfs.getString("chats", null))
+            }
+            global.edit()
+                .putString("chats", gson.toJson(merged.values.toList()))
+                .putBoolean("migrated_global_chats", true)
+                .apply()
+            AppLogger.log("ChatVM", "migrateLegacyChatsToGlobal 合并会话=${merged.size}")
+        } catch (_: Exception) {}
     }
 
     /**
@@ -163,15 +195,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         AppLogger.log("ChatVM", "bindAgent(agentId=$agentId, apply=$apply) 旧角色=$currentAgentId")
         currentAgentId = agentId
         memoryManager.setActiveAgent(agentId)
-        chatPrefs = getApplication<Application>().getSharedPreferences(prefsName("chat_sessions"), 0)
+        // 聊天列表全局共享，不随角色切换 prefs；朋友圈/状态/情绪仍按角色隔离
         momentsPrefs = getApplication<Application>().getSharedPreferences(prefsName("moments"), 0)
         statusPrefs = getApplication<Application>().getSharedPreferences(prefsName("agent_status"), 0)
         if (apply) {
             loadChatsFromStorage()
             loadMomentsFromStorage()
             _agentStatus.value = decisionEngine.loadStatus(statusPrefs)
-            _currentChatId.value = null
-            _currentMessages.value = emptyList()
             viewModelScope.launch {
                 _emotionState.value = memoryManager.loadEmotion()
                 _moodText.value = emotionEngine.getMoodDescription(
@@ -441,7 +471,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         get() { val id = _currentChatId.value ?: return null; return _chats.value.find { it.id == id } }
 
     fun createNewChat(): String {
-        val chat = Chat()
+        // 默认角色下的新会话不归属任何好友（agentId 为空，兼容旧行为）
+        val agentId = currentAgentId.takeIf {
+            it.isNotBlank() && it != SettingsManager.DEFAULT_AGENT_ID
+        } ?: ""
+        val chat = Chat(agentId = agentId)
         _chats.value = listOf(chat) + _chats.value
         _currentChatId.value = chat.id
         _currentMessages.value = emptyList()
@@ -498,10 +532,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private fun switchBindingPreservingChat(agentId: String) {
         currentAgentId = agentId
         memoryManager.setActiveAgent(agentId)
-        chatPrefs = getApplication<Application>().getSharedPreferences(prefsName("chat_sessions"), 0)
+        // 聊天列表全局共享，不随角色切换 prefs；朋友圈/状态/情绪仍按角色隔离
         momentsPrefs = getApplication<Application>().getSharedPreferences(prefsName("moments"), 0)
         statusPrefs = getApplication<Application>().getSharedPreferences(prefsName("agent_status"), 0)
-        loadChatsFromStorage()
         loadMomentsFromStorage()
         _agentStatus.value = decisionEngine.loadStatus(statusPrefs)
         viewModelScope.launch {
