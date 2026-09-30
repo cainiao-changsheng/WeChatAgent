@@ -85,6 +85,17 @@
 | 3 | ➕ 弹层按参考图重排为 2×4 网格 | `ChatScreen` 移除单项 DropdownMenu，新增 `PlusMenuPanel`：相册/拍摄/位置/语音输入/收藏/个人名片/文件/音乐 八项深色圆角按钮；“发送图片”移入“相册”，其余按钮为占位（点击关闭面板） |
 | 4 | 文档：同步更新本日志 | 记录识图与弹层改动 |
 
+## v1.0.8（2026-09-30）聊天交互修复 + 思考过程显示
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 修复大模型卡住导致聊天界面按钮无法操作 | `ChatRepository.sendMessageStream/sendVisionMessageStream` 改为 `Flow<StreamPiece>`；`ChatViewModel` 增加 `REPLY_TIMEOUT_MS`（600s）超时兜底（高级设置「停用超时」开启时不限制），超时/异常自动复位 `_isLoading` 并提示；`deliverMultiMessage` 多段投递补 `finally { _isLoading.value = false }`，任何异常不再残留 loading 态 |
+| 2 | 修复开启显示思考过程后聊天界面未显示思考过程 | `ApiModels.Delta` 新增 `reasoning_content` 字段；`ChatRepository` 流式解析区分思考与正文；`ChatViewModel` 新增 `_streamingReasoning` 状态；`ChatScreen` 新增 `ThinkingBubble`（🧠 思考过程）气泡组件，流式期间在正文气泡前展示 |
+| 3 | 大模型回复时顶部显示「对方正在输入中」 | `ChatScreen` 顶部栏在 `isLoading` 时优先展示「对方正在输入中」（绿色小字），替代原固定情绪描述 |
+| 4 | 修复点击输入框后输入法弹起顶栏上移超出状态栏 | `AndroidManifest.xml` 的 `MainActivity` 增加 `android:windowSoftInputMode="adjustResize"`，输入法弹起时顶栏保持在状态栏内 |
+| 5 | 新增「思考完成自动折叠气泡」开关 | `AdvancedSettings` 新增 `autoCollapseThinking`（持久化 `adv_auto_collapse_think`）；`AdvancedScreen` 思考设置内新增「思考完成自动折叠气泡」SubSwitchRow（即时落库）；开启后思考气泡默认折叠为「已深度思考 N 字」，点击标题可展开/收起 |
+| 6 | 文档：同步更新本日志 | 记录本次交互修复与思考过程显示改动 |
+
 ## 构建与发布说明
 
 - 分支：`master`，JDK 21 / Gradle 8.11.1，GitHub Actions 构建 debug APK（artifact：WeChatAgent-APK）。

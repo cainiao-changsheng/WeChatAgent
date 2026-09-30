@@ -48,7 +48,9 @@ data class AdvancedSettings(
     val customIcon: Boolean = false,
     val darkMode: Boolean = false,
     val sendDelayMs: Int = 0,
-    val splitMessages: Boolean = false
+    val splitMessages: Boolean = false,
+    val thinkDisplay: Boolean = true,
+    val autoCollapseThinking: Boolean = false
 )
 
 class SettingsManager private constructor(private val context: Context) {
@@ -203,6 +205,8 @@ class SettingsManager private constructor(private val context: Context) {
             .putBoolean("adv_dark_mode", settings.darkMode)
             .putInt("adv_send_delay_ms", settings.sendDelayMs.coerceIn(0, 60000))
             .putBoolean("adv_split_messages", settings.splitMessages)
+            .putBoolean("adv_think_display", settings.thinkDisplay)
+            .putBoolean("adv_auto_collapse_think", settings.autoCollapseThinking)
             .apply()
         _advancedSettings.value = settings.copy(
             sendDelayMs = settings.sendDelayMs.coerceIn(0, 60000)
@@ -219,7 +223,9 @@ class SettingsManager private constructor(private val context: Context) {
             customIcon = profilePrefs.getBoolean("adv_custom_icon", false),
             darkMode = profilePrefs.getBoolean("adv_dark_mode", false),
             sendDelayMs = profilePrefs.getInt("adv_send_delay_ms", 0).coerceIn(0, 60000),
-            splitMessages = profilePrefs.getBoolean("adv_split_messages", false)
+            splitMessages = profilePrefs.getBoolean("adv_split_messages", false),
+            thinkDisplay = profilePrefs.getBoolean("adv_think_display", true),
+            autoCollapseThinking = profilePrefs.getBoolean("adv_auto_collapse_think", false)
         )
     }
 

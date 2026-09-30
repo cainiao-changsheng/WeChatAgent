@@ -57,6 +57,7 @@ fun AppNavigation() {
     val chats by chatViewModel.chats.collectAsState()
     val currentMessages by chatViewModel.currentMessages.collectAsState()
     val streamingContent by chatViewModel.streamingContent.collectAsState()
+    val streamingReasoning by chatViewModel.streamingReasoning.collectAsState()
     val isLoading by chatViewModel.isLoading.collectAsState()
     val moodText by chatViewModel.moodText.collectAsState()
     val agentAvatar by settingsViewModel.agentAvatar.collectAsState()
@@ -208,7 +209,8 @@ fun AppNavigation() {
             val chatAgent = chat?.agentId?.let { aid -> agentProfiles.find { it.id == aid } }
             ChatScreen(
                 chatTitle = chatAgent?.name ?: chat?.title ?: "对话", messages = currentMessages,
-                streamingContent = streamingContent, isLoading = isLoading,
+                streamingContent = streamingContent, streamingReasoning = streamingReasoning,
+                isLoading = isLoading,
                 agentAvatar = agentAvatar, userAvatar = userAvatar,
                 agentAvatarUri = agentAvatarUri, userAvatarUri = userAvatarUri,
                 moodText = moodText, nowPlaying = nowPlaying,

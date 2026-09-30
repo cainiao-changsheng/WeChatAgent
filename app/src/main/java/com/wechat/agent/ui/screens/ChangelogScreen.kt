@@ -70,6 +70,17 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.8",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "修复大模型卡住时聊天界面按钮无法操作的问题，增加超时兜底与状态复位",
+                        "开启「显示思考过程」后聊天界面正确展示思考过程气泡，可点击展开 / 收起",
+                        "大模型回复时顶部显示「对方正在输入中」",
+                        "修复输入法弹起时顶栏上移超出状态栏的问题",
+                        "新增「思考完成自动折叠气泡」开关（我 → 高级 → 思考设置）"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.7-2",
                     date = "2026-09-30",
                     items = listOf(

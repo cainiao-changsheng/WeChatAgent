@@ -83,6 +83,7 @@ fun AdvancedScreen(
     var darkMode by remember { mutableStateOf(initial.darkMode) }
     var sendDelayMs by remember { mutableStateOf(initial.sendDelayMs) }
     var splitMessages by remember { mutableStateOf(initial.splitMessages) }
+    var autoCollapseThinking by remember { mutableStateOf(initial.autoCollapseThinking) }
 
     // 跳转菜单子配置展开状态
     var thinkExpanded by remember { mutableStateOf(false) }
@@ -92,7 +93,7 @@ fun AdvancedScreen(
     var delayExpanded by remember { mutableStateOf(false) }
 
     // 子项附加配置（不落库的次级选项）
-    var thinkDisplay by remember { mutableStateOf(initial.streamEnabled) }
+    var thinkDisplay by remember { mutableStateOf(initial.thinkDisplay) }
     var charByChar by remember { mutableStateOf(false) }
     var disableAnimation by remember { mutableStateOf(false) }
 
@@ -110,8 +111,9 @@ fun AdvancedScreen(
         darkMode = initial.darkMode
         sendDelayMs = initial.sendDelayMs
         splitMessages = initial.splitMessages
+        autoCollapseThinking = initial.autoCollapseThinking
         sendDelayText = initial.sendDelayMs.toString()
-        thinkDisplay = initial.streamEnabled
+        thinkDisplay = initial.thinkDisplay
     }
 
     // 即时保存：所有开关/输入变化时直接落库，无需底部保存按钮
@@ -124,7 +126,9 @@ fun AdvancedScreen(
                 customIcon = customIcon,
                 darkMode = darkMode,
                 sendDelayMs = sendDelayText.toIntOrNull()?.coerceIn(0, 60000) ?: 0,
-                splitMessages = splitMessages
+                splitMessages = splitMessages,
+                thinkDisplay = thinkDisplay,
+                autoCollapseThinking = autoCollapseThinking
             )
         )
     }
@@ -165,7 +169,12 @@ fun AdvancedScreen(
                     SubSwitchRow(
                         label = "启用思考过程显示",
                         checked = thinkDisplay,
-                        onCheckedChange = { thinkDisplay = it }
+                        onCheckedChange = { thinkDisplay = it; saveSettings() }
+                    )
+                    SubSwitchRow(
+                        label = "思考完成自动折叠气泡",
+                        checked = autoCollapseThinking,
+                        onCheckedChange = { autoCollapseThinking = it; saveSettings() }
                     )
                 }
 

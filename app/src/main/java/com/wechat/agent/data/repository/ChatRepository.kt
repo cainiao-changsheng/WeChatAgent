@@ -157,12 +157,18 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         return visionMessages
     }
 
+    /** 流式输出的一个片段：思考过程（reasoning_content）与正文（content）分离，便于前端分别渲染。 */
+    data class StreamPiece(
+        val reasoning: String = "",
+        val content: String = ""
+    )
+
     /** 多模态流式请求（SSE），用于聊天中发送图片后让支持识图的模型直接看图回复。 */
     fun sendVisionMessageStream(
         model: String,
         apiKey: String,
         messages: List<VisionMessage>
-    ): Flow<String> = flow {
+    ): Flow<StreamPiece> = flow {
         try {
             val request = VisionChatRequest(model = model, messages = messages, stream = true)
             val response = RetrofitClient.getApiService().sendVisionMessageStream(
@@ -181,8 +187,11 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                             val chunk = com.google.gson.Gson().fromJson(
                                 data, com.wechat.agent.data.network.StreamChunk::class.java
                             )
-                            val content = chunk.choices?.firstOrNull()?.delta?.content ?: ""
-                            if (content.isNotEmpty()) emit(content)
+                            val delta = chunk.choices?.firstOrNull()?.delta
+                            val reasoning = delta?.reasoning_content ?: ""
+                            val content = delta?.content ?: ""
+                            if (reasoning.isNotEmpty()) emit(StreamPiece(reasoning = reasoning))
+                            if (content.isNotEmpty()) emit(StreamPiece(content = content))
                         } catch (_: Exception) {}
                     }
                 }
@@ -200,7 +209,7 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         model: String,
         apiKey: String,
         chatMessages: List<ChatMessage>
-    ): Flow<String> = flow {
+    ): Flow<StreamPiece> = flow {
         try {
             val request = ChatRequest(model = model, messages = chatMessages, stream = true)
             val response = RetrofitClient.getApiService().sendMessageStream(
@@ -219,8 +228,11 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                             val chunk = com.google.gson.Gson().fromJson(
                                 data, com.wechat.agent.data.network.StreamChunk::class.java
                             )
-                            val content = chunk.choices?.firstOrNull()?.delta?.content ?: ""
-                            if (content.isNotEmpty()) emit(content)
+                            val delta = chunk.choices?.firstOrNull()?.delta
+                            val reasoning = delta?.reasoning_content ?: ""
+                            val content = delta?.content ?: ""
+                            if (reasoning.isNotEmpty()) emit(StreamPiece(reasoning = reasoning))
+                            if (content.isNotEmpty()) emit(StreamPiece(content = content))
                         } catch (_: Exception) {}
                     }
                 }

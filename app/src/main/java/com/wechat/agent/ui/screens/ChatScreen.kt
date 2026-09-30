@@ -63,6 +63,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,6 +82,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.wechat.agent.data.EmojiManager
 import com.wechat.agent.data.MusicController
+import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.model.Message
 import com.wechat.agent.data.model.MessageStatus
 import com.wechat.agent.data.model.Role
@@ -100,6 +102,7 @@ fun ChatScreen(
     chatTitle: String,
     messages: List<Message>,
     streamingContent: String,
+    streamingReasoning: String = "",
     isLoading: Boolean,
     agentAvatar: String = "🤖",
     userAvatar: String = "👤",
@@ -124,6 +127,8 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val isDark = MaterialTheme.colorScheme.background == Color(0xFF191919)
     val context = LocalContext.current
+    val settingsManager = remember { SettingsManager.getInstance(context.applicationContext) }
+    val advSettings by settingsManager.advancedSettings.collectAsState()
     val emojiManager = remember { EmojiManager(context) }
     var emojis by remember { mutableStateOf(emojiManager.getAllEmojis()) }
     var showAddEmojiDialog by remember { mutableStateOf(false) }
@@ -137,8 +142,8 @@ fun ChatScreen(
         }
     }
 
-    LaunchedEffect(messages.size, streamingContent) {
-        if (messages.isNotEmpty() || streamingContent.isNotEmpty()) {
+    LaunchedEffect(messages.size, streamingContent, streamingReasoning) {
+        if (messages.isNotEmpty() || streamingContent.isNotEmpty() || streamingReasoning.isNotEmpty()) {
             listState.animateScrollToItem(maxOf(0, messages.size))
         }
     }
@@ -172,7 +177,10 @@ fun ChatScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(chatTitle, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (moodText.isNotEmpty()) {
+                            if (isLoading) {
+                                Text("对方正在输入中", style = MaterialTheme.typography.labelSmall,
+                                    color = WeChatGreen.copy(alpha = 0.8f), maxLines = 1)
+                            } else if (moodText.isNotEmpty()) {
                                 Text(moodText, style = MaterialTheme.typography.labelSmall,
                                     color = WeChatGreen.copy(alpha = 0.8f), maxLines = 1)
                             }
@@ -242,7 +250,7 @@ fun ChatScreen(
             modifier = Modifier.fillMaxSize().padding(padding).background(MaterialTheme.colorScheme.background),
             state = listState
         ) {
-            if (messages.isEmpty() && streamingContent.isEmpty()) {
+            if (messages.isEmpty() && streamingContent.isEmpty() && streamingReasoning.isEmpty()) {
                 item {
                     Box(Modifier.fillMaxWidth().padding(top = 120.dp), contentAlignment = Alignment.Center) {
                         Text("发送一条消息开始对话 👋", style = MaterialTheme.typography.bodyLarge,
@@ -254,6 +262,15 @@ fun ChatScreen(
                 MessageBubble(message = message, isDark = isDark,
                     agentAvatar = agentAvatar, userAvatar = userAvatar,
                     agentAvatarUri = agentAvatarUri, userAvatarUri = userAvatarUri)
+            }
+            if (advSettings.thinkDisplay && streamingReasoning.isNotEmpty()) {
+                item {
+                    ThinkingBubble(
+                        reasoning = streamingReasoning,
+                        autoCollapsed = advSettings.autoCollapseThinking,
+                        isDark = isDark
+                    )
+                }
             }
             if (streamingContent.isNotEmpty()) {
                 item {
@@ -292,6 +309,47 @@ fun ChatScreen(
                 TextButton(onClick = { showAddEmojiDialog = false; newEmojiText = "" }) { Text("取消") }
             }
         )
+    }
+}
+
+/** 流式期间的"思考过程"气泡：深色圆角卡片，标题行可点击展开/折叠。
+ *  autoCollapsed 为 true（高级设置"思考完成自动折叠气泡"开启）时默认折叠为一行摘要。 */
+@Composable
+private fun ThinkingBubble(
+    reasoning: String,
+    autoCollapsed: Boolean,
+    isDark: Boolean
+) {
+    var collapsed by remember { mutableStateOf(autoCollapsed) }
+    val bubbleBg = if (isDark) Color(0xFF262A35) else Color(0xFFF0F1F5)
+    val titleColor = if (isDark) Color(0xFFC6C9D4) else Color(0xFF8A8FA3)
+    val bodyColor = if (isDark) Color(0xFFE8E8F0) else Color(0xFF3A3F4B)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 3.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(bubbleBg)
+            .clickable { collapsed = !collapsed }
+            .padding(horizontal = 12.dp, vertical = 9.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("🧠 思考过程", style = MaterialTheme.typography.labelMedium, color = titleColor,
+                modifier = Modifier.weight(1f))
+            Text(
+                if (collapsed) "已深度思考 ${reasoning.length} 字 ▾" else "收起 ▴",
+                style = MaterialTheme.typography.labelSmall,
+                color = titleColor.copy(alpha = 0.7f)
+            )
+        }
+        if (!collapsed) {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                reasoning,
+                style = MaterialTheme.typography.bodySmall,
+                color = bodyColor
+            )
+        }
     }
 }
 

@@ -44,7 +44,8 @@ data class Choice(
 
 data class Delta(
     val role: String? = null,
-    val content: String? = null
+    val content: String? = null,
+    val reasoning_content: String? = null
 )
 
 data class ApiError(

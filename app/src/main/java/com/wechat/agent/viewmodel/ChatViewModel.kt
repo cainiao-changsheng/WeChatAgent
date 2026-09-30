@@ -24,15 +24,18 @@ import com.wechat.agent.data.model.Mood
 import com.wechat.agent.data.model.Role
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.repository.ChatRepository
+import com.wechat.agent.data.repository.ChatRepository.StreamPiece
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlin.random.Random
 import java.util.Calendar
 import java.util.UUID
@@ -77,6 +80,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _streamingContent = MutableStateFlow("")
     val streamingContent = _streamingContent.asStateFlow()
+
+    /** 流式期间的思考过程（reasoning_content），与正文分开渲染为思考气泡。 */
+    private val _streamingReasoning = MutableStateFlow("")
+    val streamingReasoning = _streamingReasoning.asStateFlow()
+
+    /** 大模型思考/回复的最长等待时间；高级设置"停用超时"开启时不设限。 */
+    private val REPLY_TIMEOUT_MS = 600_000L
 
     private val _emotionState = MutableStateFlow(EmotionState())
     val emotionState = _emotionState.asStateFlow()
@@ -458,6 +468,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         streamingJob = viewModelScope.launch {
             _isLoading.value = true
             _streamingContent.value = ""
+            _streamingReasoning.value = ""
             try {
                 val apiKey = getApiKey()
                 val model = getModelName()
@@ -480,11 +491,21 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val chatMessages = repository.buildChatMessages(model, _currentMessages.value, emotionDesc, moodDesc)
 
                 var fullReply = ""
-                repository.sendMessageStream(model, apiKey, chatMessages)
-                    .collect { chunk ->
-                        fullReply += chunk
+                val streamFlow = repository.sendMessageStream(model, apiKey, chatMessages)
+                val collectBlock: suspend (StreamPiece) -> Unit = { piece ->
+                    if (piece.reasoning.isNotEmpty()) {
+                        _streamingReasoning.value = _streamingReasoning.value + piece.reasoning
+                    }
+                    if (piece.content.isNotEmpty()) {
+                        fullReply += piece.content
                         _streamingContent.value = fullReply
                     }
+                }
+                if (settingsManager.getAdvancedSettingsSync().timeoutDisabled) {
+                    streamFlow.collect(collectBlock)
+                } else {
+                    withTimeout(REPLY_TIMEOUT_MS) { streamFlow.collect(collectBlock) }
+                }
 
                 if (fullReply.isNotEmpty()) {
                     val cleaned = fullReply
@@ -495,6 +516,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         .trim()
 
                     _streamingContent.value = ""
+                    _streamingReasoning.value = ""
                     deliverMultiMessage(cleaned, chatId)
 
                     memoryManager.addMemory(MemoryEntry(
@@ -525,6 +547,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _isLoading.value = false
                 }
+            } catch (e: TimeoutCancellationException) {
+                _streamingReasoning.value = ""
+                val errorMsg = Message(
+                    content = "对方思考得太久没有回应，换个话题再试试？",
+                    role = Role.AGENT, status = MessageStatus.ERROR
+                )
+                finishStreaming(errorMsg.content, chatId, errorMsg.status)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _isLoading.value = false; throw e
             } catch (e: Exception) {
@@ -549,16 +578,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val seq = ++messageDeliverySequence
         deliveryJob?.cancel()
         deliveryJob = viewModelScope.launch {
-            for (i in parts.indices) {
-                if (!isActive || seq != messageDeliverySequence) break
-                if (i > 0) delay(delays[i])
-                val msg = parts[i].trim()
-                if (msg.isEmpty()) continue
-                val agentMsg = Message(content = msg, role = Role.AGENT, status = MessageStatus.SENT)
-                _currentMessages.value = _currentMessages.value + agentMsg
-                syncChatInList(chatId, msg, _currentMessages.value)
+            try {
+                for (i in parts.indices) {
+                    if (!isActive || seq != messageDeliverySequence) break
+                    if (i > 0) delay(delays[i])
+                    val msg = parts[i].trim()
+                    if (msg.isEmpty()) continue
+                    val agentMsg = Message(content = msg, role = Role.AGENT, status = MessageStatus.SENT)
+                    _currentMessages.value = _currentMessages.value + agentMsg
+                    syncChatInList(chatId, msg, _currentMessages.value)
+                }
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
@@ -938,6 +970,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val agentMessage = Message(content = content, role = Role.AGENT, status = status)
         _currentMessages.value = _currentMessages.value + agentMessage
         _streamingContent.value = ""
+        _streamingReasoning.value = ""
         syncChatInList(chatId, content, _currentMessages.value)
         _isLoading.value = false
     }
@@ -976,6 +1009,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         streamingJob = viewModelScope.launch {
             _isLoading.value = true
             _streamingContent.value = ""
+            _streamingReasoning.value = ""
             try {
                 val apiKey = getApiKey()
                 val model = getModelName()
@@ -1013,9 +1047,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 var fullReply = ""
-                replyFlow.collect { chunk ->
-                    fullReply += chunk
-                    _streamingContent.value = fullReply
+                val collectBlock: suspend (StreamPiece) -> Unit = { piece ->
+                    if (piece.reasoning.isNotEmpty()) {
+                        _streamingReasoning.value = _streamingReasoning.value + piece.reasoning
+                    }
+                    if (piece.content.isNotEmpty()) {
+                        fullReply += piece.content
+                        _streamingContent.value = fullReply
+                    }
+                }
+                if (settingsManager.getAdvancedSettingsSync().timeoutDisabled) {
+                    replyFlow.collect(collectBlock)
+                } else {
+                    withTimeout(REPLY_TIMEOUT_MS) { replyFlow.collect(collectBlock) }
                 }
 
                 if (fullReply.isNotEmpty()) {
@@ -1027,6 +1071,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         .trim()
 
                     _streamingContent.value = ""
+                    _streamingReasoning.value = ""
                     deliverMultiMessage(cleaned, chatId)
 
                     memoryManager.addMemory(MemoryEntry(
@@ -1042,6 +1087,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _isLoading.value = false
                 }
+            } catch (e: TimeoutCancellationException) {
+                _streamingReasoning.value = ""
+                val errorMsg = Message(
+                    content = "对方思考得太久没有回应，换个话题再试试？",
+                    role = Role.AGENT, status = MessageStatus.ERROR
+                )
+                finishStreaming(errorMsg.content, chatId, errorMsg.status)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _isLoading.value = false; throw e
             } catch (e: Exception) {
