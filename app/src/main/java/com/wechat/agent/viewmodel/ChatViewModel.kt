@@ -235,7 +235,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val authorName = settingsManager.agentName.first()
             val post = if (apiKey.isNotEmpty()) {
                 val prompt = momentsGenerator.buildGenerationPrompt(
-                    state, memoryManager.getL1Memory(), memoryManager.getL2Memory()
+                    state, memoryManager.getL1Memory(), memoryManager.getL2Memory(), author = authorName
                 )
                 val result = repository.sendMessage(model, apiKey,
                     listOf(ChatMessage(role = "user", content = prompt)))
@@ -328,13 +328,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val state = _emotionState.value
             val apiKey = settingsManager.apiKey.first()
             val model = settingsManager.modelName.first()
+            val authorName = settingsManager.agentName.first()
             for (i in 0 until eventCount) {
                 val virtualHour = Calendar.getInstance().apply {
                     timeInMillis = now - (eventCount - i) * LifeSimulator.INTERVAL_MINUTES * 60000L
                 }.get(Calendar.HOUR_OF_DAY)
                 if (lifeSimulator.isSleepTime(virtualHour)) continue
                 val event = if (i % 8 == 0 && apiKey.isNotEmpty()) {
-                    generateApiEvent(model, apiKey, state, virtualHour)
+                    generateApiEvent(model, apiKey, state, virtualHour, authorName)
                 } else {
                     lifeSimulator.generateOfflineEvent(virtualHour, state)
                 }
@@ -346,7 +347,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun generateApiEvent(
-        model: String, apiKey: String, state: EmotionState, hour: Int
+        model: String, apiKey: String, state: EmotionState, hour: Int, author: String
     ): LifeSimulator.SimEvent {
         return try {
             val timeDesc = when {
@@ -357,7 +358,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 else -> "晚上"
             }
             val prompt = buildString {
-                appendLine("你是AI伴侣，正在进行后台低功耗自主思考。")
+                appendLine("你是$author，正在进行后台低功耗自主思考。")
                 appendLine("现在时间是${timeDesc}${hour}点。你当前心情: ${state.mood.label}，好感度: ${state.affinity}")
                 appendLine("请以1句话生成你此刻的状态或想法，像真人自言自语。直接输出这句话。")
             }
@@ -606,7 +607,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val prompt = momentsGenerator.buildGenerationPrompt(
                     state,
                     memoryManager.getL1Memory(),
-                    memoryManager.getL2Memory()
+                    memoryManager.getL2Memory(),
+                    author = authorName
                 )
                 val result = repository.sendMessage(model, apiKey,
                     listOf(ChatMessage(role = "user", content = prompt)))
@@ -706,7 +708,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 val userComment = post.comments.lastOrNull() ?: return@launch
                 val prevAiComment = post.comments.filter { it.startsWith("$agentName::") }.lastOrNull()
-                val reply = generateReplyToComment(state, userComment.removePrefix("我::"), prevAiComment?.substringAfter("::"), post)
+                val reply = generateReplyToComment(state, userComment.removePrefix("我::"), prevAiComment?.substringAfter("::"), post, agentName)
 
                 val updated = post.copy(
                     commentCount = post.commentCount + 1,
@@ -719,7 +721,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun generateReplyToComment(
-        state: EmotionState, userComment: String, prevAiComment: String?, post: MomentPost
+        state: EmotionState, userComment: String, prevAiComment: String?, post: MomentPost, author: String
     ): String {
         return try {
             val apiKey = settingsManager.apiKey.first()
@@ -731,7 +733,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     "对方在你动态下评论。"
                 }
                 val prompt = "$contextHint 对方回复: \"${userComment.take(60)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
-                    "请以AI伴侣的身份，回一条简短自然的回复（15字以内），像真人回复评论一样自然，可以就此打住，不要引号和任何符号前缀。直接输出。"
+                    "请以$author的身份，回一条简短自然的回复（15字以内），像真人回复评论一样自然，可以就此打住，不要引号和任何符号前缀。直接输出。"
                 val result = if (post.imageUri.isNotBlank()) {
                     // 动态带图：若模型支持识图则结合图片内容回复，失败降级本地兜底
                     val imageDataUrl = readImageAsBase64(post.imageUri)
@@ -776,17 +778,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (post.aiReacted) return@launch
                 val state = _emotionState.value
                 val rand = Random.nextInt(100)
+                val agentName = settingsManager.agentName.first()
 
                 var aiLiked = false
                 var comment: String? = null
                 when {
                     state.affinity >= 70 -> {
                         aiLiked = true
-                        if (rand < 75) comment = generateReactionComment(state, post)
+                        if (rand < 75) comment = generateReactionComment(state, post, agentName)
                     }
                     state.affinity >= 45 -> {
                         if (rand < 55) aiLiked = true
-                        if (rand < 40) comment = generateReactionComment(state, post)
+                        if (rand < 40) comment = generateReactionComment(state, post, agentName)
                     }
                     state.affinity >= 25 -> {
                         if (rand < 30) aiLiked = true
@@ -797,7 +800,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 val finalComment = comment ?: ""
-                val agentName = settingsManager.agentName.first()
                 val prefixedComment = if (finalComment.isNotEmpty()) "$agentName::$finalComment" else ""
                 val updated = post.copy(
                     likeCount = post.likeCount + (if (aiLiked) 1 else 0),
@@ -812,13 +814,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun generateReactionComment(state: EmotionState, post: MomentPost): String {
+    private suspend fun generateReactionComment(state: EmotionState, post: MomentPost, author: String): String {
         return try {
             val apiKey = settingsManager.apiKey.first()
             val model = settingsManager.modelName.first()
             if (apiKey.isNotEmpty()) {
                 val prompt = "你正在看对方发的朋友圈。对方动态内容: \"${post.content.take(80)}\"。你当前心情: ${state.mood.label}，好感度: ${state.affinity}/100。" +
-                    "请以AI伴侣的身份，回一条简短自然的评论（15字以内），像真人发朋友圈评论一样，不要引号和任何符号前缀。直接输出。"
+                    "请以$author的身份，回一条简短自然的评论（15字以内），像真人发朋友圈评论一样，不要引号和任何符号前缀。直接输出。"
                 val result = if (post.imageUri.isNotBlank()) {
                     // 动态带图：优先用多模态识图，结合图片内容回复；模型不支持时降级为纯文本
                     val imageDataUrl = readImageAsBase64(post.imageUri)
@@ -895,7 +897,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val model = settingsManager.modelName.first()
                 val state = _emotionState.value
                 val prompt = momentsGenerator.buildGenerationPrompt(
-                    state, memoryManager.getL1Memory(), memoryManager.getL2Memory()
+                    state, memoryManager.getL1Memory(), memoryManager.getL2Memory(), author = authorName
                 )
                 val result = repository.sendMessage(model, apiKey,
                     listOf(ChatMessage(role = "user", content = prompt)))

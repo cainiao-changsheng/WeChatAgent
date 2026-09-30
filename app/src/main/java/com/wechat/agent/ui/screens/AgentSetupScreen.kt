@@ -90,7 +90,7 @@ fun AgentSetupScreen(
     }
 
     fun doSave() {
-        val finalName = name.trim().ifEmpty { "AI伴侣" }
+        val finalName = name.trim().ifEmpty { "我" }
         onSave(finalName, gender.trim().ifEmpty { "女" }, age.trim().ifEmpty { "18" },
             persona, globalSettings, avatar, avatarUri)
     }

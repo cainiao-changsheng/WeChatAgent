@@ -60,7 +60,7 @@ class MomentsViewModel(application: Application) : AndroidViewModel(application)
                 val l1Memories = memoryManager.getL1Memory()
                 val l2Memories = memoryManager.getL2Memory()
 
-                val prompt = generator.buildGenerationPrompt(state, l1Memories, l2Memories)
+                val prompt = generator.buildGenerationPrompt(state, l1Memories, l2Memories, author = authorName)
 
                 val result = repository.sendMessage(
                     model, apiKey,

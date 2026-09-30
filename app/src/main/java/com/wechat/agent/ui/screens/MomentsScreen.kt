@@ -68,7 +68,7 @@ import java.util.Locale
 fun MomentsScreen(
     agentAvatar: String = "🤖",
     agentAvatarUri: String = "",
-    agentName: String = "AI伴侣",
+    agentName: String = "我",
     userAvatar: String = "👤",
     userAvatarUri: String = "",
     posts: List<MomentPost>,

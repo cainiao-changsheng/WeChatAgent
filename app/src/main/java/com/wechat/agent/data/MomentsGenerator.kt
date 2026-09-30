@@ -90,7 +90,7 @@ class MomentsGenerator(private val memoryManager: MemoryManager) {
         return events
     }
 
-    fun generateMomentPost(state: EmotionState, author: String = "AI伴侣"): MomentPost {
+    fun generateMomentPost(state: EmotionState, author: String = "我"): MomentPost {
         val timeCat = getTimeCategory()
         val events = generateSimulatedLifeEvents(state)
         val moodEmoji = getMoodEmoji(state.mood)
@@ -123,14 +123,15 @@ class MomentsGenerator(private val memoryManager: MemoryManager) {
     fun buildGenerationPrompt(
         state: EmotionState,
         l1Memories: List<MemoryEntry>,
-        l2Memories: List<MemoryEntry>
+        l2Memories: List<MemoryEntry>,
+        author: String = "我"
     ): String {
         val recentMemories = l1Memories.take(3).joinToString("\n") { "- ${it.content.take(100)}" }
         val growthMemories = l2Memories.filter { it.importance >= 3 }.take(3).joinToString("\n") { "- ${it.content.take(100)}" }
         val timeCat = getTimeCategory()
 
         return buildString {
-            appendLine("你是一个AI伴侣，现在要发一条朋友圈动态。")
+            appendLine("你是$author，现在要发一条朋友圈动态。")
             appendLine()
             appendLine("时间：${timeCat.label}")
             appendLine("当前心情：${state.mood.label}")

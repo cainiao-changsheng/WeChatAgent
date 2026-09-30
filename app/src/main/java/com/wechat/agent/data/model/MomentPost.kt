@@ -9,7 +9,7 @@ data class MomentPost(
     val commentCount: Int = 0,
     val liked: Boolean = false,
     val timeCategory: TimeCategory = TimeCategory.MORNING,
-    val author: String = "AI伴侣",
+    val author: String = "我",
     val comments: List<String> = emptyList(),
     val aiLiked: Boolean = false,
     val aiReacted: Boolean = false,
