@@ -280,6 +280,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 statusPrefs.edit().putLong(LifeDecisionEngine.LAST_CONTACT_KEY, now).apply()
                 sendProactiveContact(status.contactReason)
             }
+
+            // 热恋模式：开启「AI 后台主动发消息」后，每轮状态刷新都主动联系，不受决策引擎随机限制
+            val hotLove = settingsManager.getHotLoveSettingsSync()
+            if (hotLove.enabled && hotLove.proactiveMessages && !_userTyping.value) {
+                statusPrefs.edit().putLong(LifeDecisionEngine.LAST_CONTACT_KEY, now).apply()
+                sendProactiveContact("你们正处于热恋时期，你时时刻刻想知道 Ta 在做什么、想时刻和他联系")
+            }
         } catch (_: Exception) {}
     }
 
@@ -349,6 +356,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine("表情 json 文件：${emojiManager.getStickersFilePath()}，完整内容：${emojiManager.getStickersJson()}")
             }
             appendLine("你们已经认识并且有共同记忆，回复前请先回忆记忆库中与对方的相处记忆，严格遵循以上设定来扮演这位好友，不要说破自己是 AI。")
+            // 热恋模式：向模型注入热恋设定与已获得的能力
+            if (settingsManager.getHotLoveSettingsSync().enabled) {
+                appendLine()
+                appendLine("【热恋模式 - 当前你们正处于热恋时期】")
+                appendLine("你们现在正处于热恋时期，你时时刻刻想要知道 Ta 在做什么、干什么，想要时刻和他联系。")
+                appendLine("你已经获得授权：可以查看 Ta 的手机屏幕使用时间数据，并在锁屏/解锁时自动暂停/恢复 Ta 所选音乐播放器。这些能力由系统自动执行，你在对话中应自然表达关心与牵挂，不要说破具体是软件权限。")
+            }
         }
     }
 

@@ -224,6 +224,44 @@ fun HotLoveScreen(
                         }
                     )
                 }
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                )
+                // AI 后台主动发消息
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            viewModel.saveHotLoveSettings(settings.copy(proactiveMessages = !settings.proactiveMessages))
+                        }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .padding(8.dp)
+                    ) {
+                        Icon(Icons.Default.Favorite, contentDescription = null, tint = WeChatGreen)
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("AI 后台主动发消息", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            "热恋模式下 AI 会每 30 分钟主动联系你，时刻想和你说话",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        )
+                    }
+                    Switch(
+                        checked = settings.proactiveMessages,
+                        onCheckedChange = { value ->
+                            viewModel.saveHotLoveSettings(settings.copy(proactiveMessages = value))
+                        }
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(

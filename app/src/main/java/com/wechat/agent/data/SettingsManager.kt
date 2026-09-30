@@ -48,7 +48,8 @@ data class AutoBackupConfig(
 data class HotLoveSettings(
     val enabled: Boolean = false,
     val selectedMusicPackage: String = "",
-    val lockScreenPause: Boolean = true
+    val lockScreenPause: Boolean = true,
+    val proactiveMessages: Boolean = false
 )
 
 /** 高级设置（我 → 高级 页），对应参考图"思考设置"各功能项。 */
@@ -216,6 +217,7 @@ class SettingsManager private constructor(private val context: Context) {
             .putBoolean("hotlove_enabled", settings.enabled)
             .putString("hotlove_music_package", settings.selectedMusicPackage ?: "")
             .putBoolean("hotlove_lock_screen_pause", settings.lockScreenPause)
+            .putBoolean("hotlove_proactive_messages", settings.proactiveMessages)
             .apply()
         _hotLoveSettings.value = settings
     }
@@ -226,7 +228,8 @@ class SettingsManager private constructor(private val context: Context) {
         return HotLoveSettings(
             enabled = profilePrefs.getBoolean("hotlove_enabled", false),
             selectedMusicPackage = profilePrefs.getString("hotlove_music_package", "") ?: "",
-            lockScreenPause = profilePrefs.getBoolean("hotlove_lock_screen_pause", true)
+            lockScreenPause = profilePrefs.getBoolean("hotlove_lock_screen_pause", true),
+            proactiveMessages = profilePrefs.getBoolean("hotlove_proactive_messages", false)
         )
     }
 
