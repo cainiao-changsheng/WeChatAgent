@@ -1,0 +1,4 @@
+[2026-09-30 17:55:39.804] [ChatVM] migrateLegacyChatsToGlobal 合并会话=0
+[2026-09-30 17:55:39.806] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-09-30 17:55:39.973] [ChatVM] switchAgent(agentId=default) 当前角色=default
+[2026-09-30 17:55:39.974] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
