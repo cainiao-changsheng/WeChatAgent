@@ -84,6 +84,7 @@ fun DiscoverScreen(
         topBar = {
             // 顶部栏：左侧好友下拉菜单 + 标题 + 右侧记录按钮（与其它导航页顶部栏对齐）
             CenteredTopBar(
+                content = {},
                 fullWidthContent = {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
