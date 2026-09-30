@@ -176,13 +176,7 @@ fun ChatScreen(
                     }
                 },
                 showBack = true,
-                onBack = onBack,
-                actions = {
-                    IconButton(onClick = onOpenMusicApp) {
-                        Icon(Icons.Default.MusicNote, contentDescription = "打开音乐",
-                            tint = WeChatGreen, modifier = Modifier.size(22.dp))
-                    }
-                }
+                onBack = onBack
             )
         },
 

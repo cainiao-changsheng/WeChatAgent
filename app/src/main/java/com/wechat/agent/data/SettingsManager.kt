@@ -40,6 +40,17 @@ data class AutoBackupConfig(
     val backupOnExit: Boolean = false
 )
 
+/** 高级设置（我 → 高级 页），对应参考图"思考设置"各功能项。 */
+data class AdvancedSettings(
+    val streamEnabled: Boolean = true,
+    val customParams: String = "",
+    val timeoutDisabled: Boolean = false,
+    val customIcon: Boolean = false,
+    val darkMode: Boolean = false,
+    val sendDelayMs: Int = 0,
+    val splitMessages: Boolean = false
+)
+
 class SettingsManager private constructor(private val context: Context) {
 
     companion object {
@@ -175,6 +186,40 @@ class SettingsManager private constructor(private val context: Context) {
             intervalMinutes = profilePrefs.getInt("backup_interval_minutes", 60).coerceIn(5, 1440),
             overwriteOld = profilePrefs.getBoolean("backup_overwrite_old", false),
             backupOnExit = profilePrefs.getBoolean("backup_on_exit", false)
+        )
+    }
+
+    // ========== 高级设置（我 → 高级） ==========
+
+    private val _advancedSettings = MutableStateFlow(loadAdvancedSettings())
+    val advancedSettings: StateFlow<AdvancedSettings> = _advancedSettings.asStateFlow()
+
+    fun saveAdvancedSettings(settings: AdvancedSettings) {
+        profilePrefs.edit()
+            .putBoolean("adv_stream_enabled", settings.streamEnabled)
+            .putString("adv_custom_params", settings.customParams ?: "")
+            .putBoolean("adv_timeout_disabled", settings.timeoutDisabled)
+            .putBoolean("adv_custom_icon", settings.customIcon)
+            .putBoolean("adv_dark_mode", settings.darkMode)
+            .putInt("adv_send_delay_ms", settings.sendDelayMs.coerceIn(0, 60000))
+            .putBoolean("adv_split_messages", settings.splitMessages)
+            .apply()
+        _advancedSettings.value = settings.copy(
+            sendDelayMs = settings.sendDelayMs.coerceIn(0, 60000)
+        )
+    }
+
+    fun getAdvancedSettingsSync(): AdvancedSettings = _advancedSettings.value
+
+    private fun loadAdvancedSettings(): AdvancedSettings {
+        return AdvancedSettings(
+            streamEnabled = profilePrefs.getBoolean("adv_stream_enabled", true),
+            customParams = profilePrefs.getString("adv_custom_params", "") ?: "",
+            timeoutDisabled = profilePrefs.getBoolean("adv_timeout_disabled", false),
+            customIcon = profilePrefs.getBoolean("adv_custom_icon", false),
+            darkMode = profilePrefs.getBoolean("adv_dark_mode", false),
+            sendDelayMs = profilePrefs.getInt("adv_send_delay_ms", 0).coerceIn(0, 60000),
+            splitMessages = profilePrefs.getBoolean("adv_split_messages", false)
         )
     }
 

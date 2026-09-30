@@ -538,7 +538,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun deliverMultiMessage(text: String, chatId: String) {
-        val parts = typingTracker.splitIntoMessages(text)
+        val splitEnabled = settingsManager.getAdvancedSettingsSync().splitMessages
+        val parts = if (splitEnabled) typingTracker.splitIntoMessages(text) else listOf(text)
         if (parts.size <= 1) {
             finishStreaming(text, chatId, MessageStatus.SENT)
             return

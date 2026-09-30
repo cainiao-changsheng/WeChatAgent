@@ -131,6 +131,11 @@ fun MyProfileScreen(
                 title = "设置",
                 onClick = onOpenSettings
             )
+            ProfileMenuRow(
+                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "高级", tint = Color(0xFF7C4DFF)) },
+                title = "高级",
+                onClick = onOpenAdvanced
+            )
         }
     }
 }

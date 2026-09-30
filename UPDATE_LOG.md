@@ -67,6 +67,15 @@
 |---|---------|---------|
 | 1 | 修复：大模型回复未拿到设定名字（自称“阿深”而非设定名） | 根因：`SettingsManager` 在 `ChatViewModel`/`SettingsViewModel`/`MomentsViewModel` 中各自 `new` 出独立实例，内存 `agentProfiles` 快照互不同步——设置页通过 SettingsViewModel 实例保存“李依娜”后，ChatViewModel 持的仍是构造时读入的旧快照，`buildPersonaPrompt(agentId)` 按 id 找不到档案返回空串，personaPrompt 未注入，大模型凭默认/记忆自由发挥自称。解决：`SettingsManager` 改为单例（`companion object` 的 `getInstance(context)` + `@Volatile` + synchronized 双检锁，私有构造），三个 ViewModel 统一改调 `SettingsManager.getInstance(application)`，档案增删改后所有消费方实时同步 |
 
+## v1.0.7（2026-09-30）我页高级设置 + 移除聊天详情音乐按钮
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 新增“我 → 高级”设置页 | 按参考图排版实现暗色“思考设置”页：列表含思考设置、流式输出、自定义请求参数、停用超时（开关）、添加自定义桌面图标、深色模式、发送延时、多行文本自动分割（开关），底部固定“保存 / 测试 / 取消”按钮；`AdvancedSettings` 数据类 + `SettingsManager` 持久化（SharedPreferences），`MyProfileScreen` 新增“高级”入口，`MainActivity` 新增 `advanced` 路由 |
+| 2 | 高级设置接入聊天行为 | `ChatViewModel.sendMessage/sendImageMessage` 读取高级设置：流式输出开关控制逐字实时显示；发送延时在请求前生效；多行文本自动分割开关控制回复拆分为多条或合并为单条 |
+| 3 | 移除聊天详情页右上角音乐按钮 | `ChatScreen` 顶部 actions 的 MusicNote 图标按钮删除（播放中底部控制条保留） |
+| 4 | 文档：同步更新本日志 | 记录本次高级设置与音乐按钮改动 |
+
 ## 构建与发布说明
 
 - 分支：`master`，JDK 21 / Gradle 8.11.1，GitHub Actions 构建 debug APK（artifact：WeChatAgent-APK）。

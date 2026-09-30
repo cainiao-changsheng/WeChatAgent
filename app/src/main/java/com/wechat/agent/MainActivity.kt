@@ -290,6 +290,13 @@ fun AppNavigation() {
             )
         }
 
+        composable("advanced") {
+            AdvancedScreen(
+                viewModel = settingsViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
+
         composable("lab") {
             LabScreen(
                 onBack = { navController.popBackStack() },

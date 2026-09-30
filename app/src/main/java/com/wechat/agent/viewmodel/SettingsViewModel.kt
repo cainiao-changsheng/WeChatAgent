@@ -75,6 +75,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     val backupConfig: StateFlow<AutoBackupConfig> = settingsManager.backupConfig
 
+    // ========== 高级设置（我 → 高级） ==========
+
+    val advancedSettings: StateFlow<AdvancedSettings> = settingsManager.advancedSettings
+
+    fun saveAdvancedSettings(settings: AdvancedSettings) {
+        settingsManager.saveAdvancedSettings(settings)
+    }
+
+    fun getAdvancedSettingsSync(): AdvancedSettings = settingsManager.getAdvancedSettingsSync()
+
     private val _saveSuccess = MutableStateFlow(false)
     val saveSuccess: StateFlow<Boolean> = _saveSuccess.asStateFlow()
 
