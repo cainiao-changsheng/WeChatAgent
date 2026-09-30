@@ -123,6 +123,9 @@
 | 3 | 新增：底部「发现」页（原「发现」更名「动态」） | 底部导航新增「发现」Tab，原「发现」页更名为「动态」；新建 `DiscoverScreen.kt` 承载发现页内容 |
 | 4 | 新增：全知全能观察者时间线记录 | 新增 `ObservationStore.kt` 记录观察者时间线事件；`ChatViewModel` 接入观察记录存储与读取，发现页展示时间线 |
 | 5 | 界面：发现页顶部栏对齐 | `DiscoverScreen` 顶部栏复用 `CenteredTopBar`（56dp + statusBarsPadding），与聊天/通讯录/我各导航页对齐 |
+| 6 | 优化：观察者记录结合角色人设、记忆与当前时间 | `ChatViewModel.recordObservation` 构造 prompt 时注入：当前时间（`SimpleDateFormat`）、选中角色的人设与全局设定、`memoryManager.buildMemoryContext()` 返回的角色记忆（临时切换 activeAgent 读取后恢复），要求大模型据此推断该角色在当前时间下最可能发生的客观行为，行为与设定/记忆/时间吻合 |
+| 7 | 界面：聊天图片尺寸缩小 30% | `ChatScreen` 图片消息尺寸由 200dp 改为 140dp |
+| 8 | 界面：发现页移除副标题说明文本 | `DiscoverScreen` 顶部栏去掉「全知全能的观察者 · 仅记录客观行为」副标题，仅保留居中「发现」标题 |
 
 ## v1.0.11（2026-09-30）图片表情系统 + 聊天图片自动缓存
 

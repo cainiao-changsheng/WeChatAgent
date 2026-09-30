@@ -536,7 +536,7 @@ fun MessageBubble(
                         contentDescription = "图片消息",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(width = 200.dp, height = 200.dp)
+                            .size(width = 140.dp, height = 140.dp)
                             .clip(RoundedCornerShape(
                                 topStart = if (isUser) 16.dp else 4.dp, topEnd = if (isUser) 4.dp else 16.dp,
                                 bottomStart = 16.dp, bottomEnd = 16.dp))

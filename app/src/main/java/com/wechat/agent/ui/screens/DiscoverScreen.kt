@@ -138,16 +138,7 @@ fun DiscoverScreen(
                         }
 
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("发现", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                            Text(
-                                "全知全能的观察者 · 仅记录客观行为",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = WeChatGreen.copy(alpha = 0.8f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                        Text("发现", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
 
                         TextButton(
                             onClick = { selectedProfile?.let { onRecord(it.id, it.name) } },

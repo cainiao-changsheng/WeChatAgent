@@ -41,7 +41,10 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlin.random.Random
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -738,12 +741,37 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val model = settingsManager.modelName.first()
                 val behavior = if (apiKey.isNotEmpty()) {
                     val profile = settingsManager.agentProfiles.value.find { it.id == agentId }
+                    // 读取该角色记忆库（与聊天共用同一记忆，临时切换避免污染当前上下文）
+                    val prevAgent = memoryManager.activeAgentId
+                    val memoryCtx = try {
+                        memoryManager.setActiveAgent(agentId)
+                        memoryManager.buildMemoryContext()
+                    } finally {
+                        memoryManager.setActiveAgent(prevAgent)
+                    }
+                    val nowText = SimpleDateFormat("yyyy年M月d日 HH:mm", Locale.getDefault()).format(Date())
+                    val personaLine = buildString {
+                        append("性格人设：${profile?.persona?.ifBlank { "未设定" }}")
+                        if (!profile?.globalSettings.isNullOrBlank()) {
+                            append("；全局设定：${profile?.globalSettings}")
+                        }
+                    }
                     val prompt = buildString {
-                        appendLine("你是全知全能的观察者。请用简洁的中文记录「${profile?.name ?: agentName}」当前时间戳下的客观行为。")
+                        appendLine("你是全知全能的观察者。现在时间是 $nowText。")
+                        appendLine("请基于以下角色设定与其记忆，推断该角色在当前时间下最可能发生的客观行为：")
+                        appendLine("角色：${profile?.name ?: agentName}（${profile?.gender ?: "未知"}，${profile?.age ?: "未知"}岁）")
+                        appendLine(personaLine)
+                        if (memoryCtx.isNotBlank()) {
+                            appendLine("该角色最近的记忆：")
+                            appendLine(memoryCtx.trim())
+                        } else {
+                            appendLine("该角色暂无记忆。")
+                        }
                         appendLine("要求：")
-                        appendLine("1. 只记录可观察的客观行为（正在做什么、处于什么状态、与谁互动等），禁止记录任何心理活动、情绪、想法或内心状态。")
-                        appendLine("2. 第一句话直接描述行为，不要任何解释、前缀或评价。")
-                        appendLine("3. 控制在 80 字以内。")
+                        appendLine("1. 结合上述人设、记忆与当前时间，记录该角色此刻可观察的客观行为（正在做什么、处于什么状态、与谁互动等），让行为与角色设定和时间吻合。")
+                        appendLine("2. 禁止记录任何心理活动、情绪、想法或内心状态。")
+                        appendLine("3. 第一句话直接描述行为，不要任何解释、前缀或评价。")
+                        appendLine("4. 控制在 80 字以内。")
                     }
                     runCatching {
                         repository.sendMessage(model, apiKey, listOf(ChatMessage(role = "user", content = prompt))).getOrNull()
