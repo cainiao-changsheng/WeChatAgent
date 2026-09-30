@@ -44,6 +44,13 @@ data class AutoBackupConfig(
     val backupOnExit: Boolean = false
 )
 
+/** 实验功能：热恋模式。开启后可获取屏幕使用时间、锁屏控制与音乐播放器控制权限。 */
+data class HotLoveSettings(
+    val enabled: Boolean = false,
+    val selectedMusicPackage: String = "",
+    val lockScreenPause: Boolean = true
+)
+
 /** 高级设置（我 → 高级 页），对应参考图"思考设置"各功能项。 */
 data class AdvancedSettings(
     val streamEnabled: Boolean = true,
@@ -196,6 +203,30 @@ class SettingsManager private constructor(private val context: Context) {
             intervalMinutes = profilePrefs.getInt("backup_interval_minutes", 60).coerceIn(5, 1440),
             overwriteOld = profilePrefs.getBoolean("backup_overwrite_old", false),
             backupOnExit = profilePrefs.getBoolean("backup_on_exit", false)
+        )
+    }
+
+    // ========== 实验功能：热恋模式 ==========
+
+    private val _hotLoveSettings = MutableStateFlow(loadHotLoveSettings())
+    val hotLoveSettings: StateFlow<HotLoveSettings> = _hotLoveSettings.asStateFlow()
+
+    fun saveHotLoveSettings(settings: HotLoveSettings) {
+        profilePrefs.edit()
+            .putBoolean("hotlove_enabled", settings.enabled)
+            .putString("hotlove_music_package", settings.selectedMusicPackage ?: "")
+            .putBoolean("hotlove_lock_screen_pause", settings.lockScreenPause)
+            .apply()
+        _hotLoveSettings.value = settings
+    }
+
+    fun getHotLoveSettingsSync(): HotLoveSettings = _hotLoveSettings.value
+
+    private fun loadHotLoveSettings(): HotLoveSettings {
+        return HotLoveSettings(
+            enabled = profilePrefs.getBoolean("hotlove_enabled", false),
+            selectedMusicPackage = profilePrefs.getString("hotlove_music_package", "") ?: "",
+            lockScreenPause = profilePrefs.getBoolean("hotlove_lock_screen_pause", true)
         )
     }
 

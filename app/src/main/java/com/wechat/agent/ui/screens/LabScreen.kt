@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.WifiTethering
@@ -45,7 +46,8 @@ import com.wechat.agent.ui.theme.WeChatGreen
 @Composable
 fun LabScreen(
     onBack: () -> Unit = {},
-    onOpenModelConfig: () -> Unit = {}
+    onOpenModelConfig: () -> Unit = {},
+    onOpenHotLove: () -> Unit = {}
 ) {
     Scaffold(
         topBar = {
@@ -100,6 +102,17 @@ fun LabScreen(
                         subtitle = "模型配置内一键发送测试消息验证连通性",
                         status = "内测中",
                         onClick = onOpenModelConfig
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
+                    LabItem(
+                        icon = { Icon(Icons.Default.Favorite, contentDescription = null, tint = WeChatGreen) },
+                        title = "热恋模式",
+                        subtitle = "屏幕使用时间、锁屏控制与音乐播放器控制权限",
+                        status = "内测中",
+                        onClick = onOpenHotLove
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 16.dp),

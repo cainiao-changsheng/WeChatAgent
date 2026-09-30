@@ -70,6 +70,16 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.18",
+                    date = "2026-09-30",
+                    items = listOf(
+                        "新增：实验室「热恋模式」实验功能",
+                        "开启后可查看手机屏幕使用时间数据（需授权使用情况访问权限）",
+                        "锁屏控制：锁屏自动暂停所选音乐，解锁自动恢复播放",
+                        "音乐播放器控制：可从已安装音乐 App 中选择并接管播放/暂停/切歌"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.17",
                     date = "2026-09-30",
                     items = listOf(

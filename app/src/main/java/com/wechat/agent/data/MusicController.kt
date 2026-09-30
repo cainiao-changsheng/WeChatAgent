@@ -41,6 +41,19 @@ class MusicController(private val context: Context) {
         return false
     }
 
+    /** 按用户选择的音乐 App 包名连接当前活跃媒体会话；无匹配返回 false。 */
+    fun connectTo(packageName: String): Boolean {
+        if (packageName.isBlank()) return false
+        val controllers = sessionManager.getActiveSessions(
+            ComponentName(context, NotificationListener::class.java)
+        )
+        val target = controllers.firstOrNull { it.packageName == packageName } ?: return false
+        mediaController?.unregisterCallback(controllerCallback)
+        mediaController = target
+        mediaController?.registerCallback(controllerCallback)
+        return true
+    }
+
     fun getNowPlaying(): NowPlaying {
         val ctrl = mediaController ?: return NowPlaying()
         val metadata = ctrl.metadata ?: return NowPlaying()

@@ -26,3 +26,6 @@
 # Coroutines
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
 -keepnames class kotlinx.coroutines.CoroutineExceptionHandler {}
+
+# 热恋模式锁屏控制接收器（动态注册，需防混淆裁剪）
+-keep class com.wechat.agent.data.HotLoveReceiver { *; }

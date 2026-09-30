@@ -7,6 +7,7 @@ import com.wechat.agent.data.AgentProfile
 import com.wechat.agent.data.AdvancedSettings
 import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.AutoBackupConfig
+import com.wechat.agent.data.HotLoveSettings
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.network.ChatRequest
@@ -76,6 +77,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     val backupConfig: StateFlow<AutoBackupConfig> = settingsManager.backupConfig
+
+    // ========== 实验功能：热恋模式 ==========
+
+    val hotLoveSettings: StateFlow<HotLoveSettings> = settingsManager.hotLoveSettings
+
+    fun saveHotLoveSettings(settings: HotLoveSettings) {
+        settingsManager.saveHotLoveSettings(settings)
+    }
 
     // ========== 高级设置（我 → 高级） ==========
 

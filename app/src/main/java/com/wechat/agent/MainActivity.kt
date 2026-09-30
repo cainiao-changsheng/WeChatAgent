@@ -1,5 +1,7 @@
 package com.wechat.agent
 
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -7,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -16,6 +19,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.AutoBackupConfig
+import com.wechat.agent.data.HotLoveReceiver
 import com.wechat.agent.ui.components.WeChatBottomBar
 import com.wechat.agent.ui.screens.AdvancedScreen
 import com.wechat.agent.ui.screens.AgentDetailScreen
@@ -28,6 +32,7 @@ import com.wechat.agent.ui.screens.ContactsScreen
 import com.wechat.agent.ui.screens.DebugScreen
 import com.wechat.agent.ui.screens.DiscoverScreen
 import com.wechat.agent.ui.screens.EditProfileScreen
+import com.wechat.agent.ui.screens.HotLoveScreen
 import com.wechat.agent.ui.screens.LabScreen
 import com.wechat.agent.ui.screens.LogScreen
 import com.wechat.agent.ui.screens.ModelConfigScreen
@@ -40,14 +45,31 @@ import com.wechat.agent.viewmodel.ChatViewModel
 import com.wechat.agent.viewmodel.SettingsViewModel
 
 class MainActivity : ComponentActivity() {
+    private val hotLoveReceiver = HotLoveReceiver()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AppLogger.init(this)
+        // 热恋模式锁屏控制：监听锁屏/解锁广播（SCREEN_OFF/SCREEN_ON 系统广播，动态注册最可靠）
+        ContextCompat.registerReceiver(
+            this,
+            hotLoveReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_SCREEN_ON)
+            },
+            ContextCompat.RECEIVER_EXPORTED
+        )
         setContent {
             WeChatAgentTheme {
                 AppNavigation()
             }
         }
+    }
+
+    override fun onDestroy() {
+        runCatching { unregisterReceiver(hotLoveReceiver) }
+        super.onDestroy()
     }
 }
 
@@ -347,7 +369,15 @@ fun AppNavigation() {
         composable("lab") {
             LabScreen(
                 onBack = { navController.popBackStack() },
-                onOpenModelConfig = { navController.navigate("modelConfig") }
+                onOpenModelConfig = { navController.navigate("modelConfig") },
+                onOpenHotLove = { navController.navigate("hotLove") }
+            )
+        }
+
+        composable("hotLove") {
+            HotLoveScreen(
+                viewModel = settingsViewModel,
+                onBack = { navController.popBackStack() }
             )
         }
 

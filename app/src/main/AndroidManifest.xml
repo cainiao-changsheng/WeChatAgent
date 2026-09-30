@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 热恋模式：屏幕使用时间（使用情况访问权限，需用户到系统设置手动授权） -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:allowBackup="false"
@@ -44,5 +48,19 @@
             </intent-filter>
         </service>
     </application>
+
+    <!-- 热恋模式：可见性声明，用于列出并控制已安装的常见音乐 App -->
+    <queries>
+        <package android:name="com.tencent.qqmusic" />
+        <package android:name="com.netease.cloudmusic" />
+        <package android:name="com.kugou.android" />
+        <package android:name="com.kuwo.player" />
+        <package android:name="com.spotify.music" />
+        <package android:name="com.apple.android.music" />
+        <package android:name="com.bytedance.music" />
+        <package android:name="com.migu.music" />
+        <package android:name="com.miui.player" />
+        <package android:name="com.tencent.weme" />
+    </queries>
 
 </manifest>
