@@ -27,6 +27,8 @@ class SpeechManager private constructor(private val context: Context) {
 
     data class SpeechState(
         val modelsReady: Boolean = false,
+        val asrReady: Boolean = false,
+        val ttsReady: Boolean = false,
         val listening: Boolean = false,
         val speaking: Boolean = false,
         val partialText: String = "",
@@ -52,14 +54,22 @@ class SpeechManager private constructor(private val context: Context) {
 
     /** 检查/刷新模型就绪状态；尝试懒加载引擎（失败仅记录错误，不崩溃）。 */
     fun refresh() {
-        val ready = requiredModels.all { ModelCatalog.isReady(it, modelsRoot()) }
-        _state.value = _state.value.copy(modelsReady = ready)
-        if (ready) {
+        val asrReady = requiredModels.filter { it.type == "asr" }.all { ModelCatalog.isReady(it, modelsRoot()) }
+        val ttsReady = requiredModels.filter { it.type == "tts" }.all { ModelCatalog.isReady(it, modelsRoot()) }
+        val ready = asrReady && ttsReady
+        _state.value = _state.value.copy(modelsReady = ready, asrReady = asrReady, ttsReady = ttsReady)
+        if (asrReady) {
             runCatching {
                 if (asrEngine == null) {
                     val vosk = requiredModels.firstOrNull { it.type == "asr" }
                     if (vosk != null) asrEngine = VoskAsrEngine(File(modelsRoot(), vosk.targetDir))
                 }
+            }.onFailure {
+                _state.value = _state.value.copy(lastError = "引擎加载失败：${it.message}")
+            }
+        }
+        if (ttsReady) {
+            runCatching {
                 if (ttsEngine == null) {
                     val vits = allModels.firstOrNull { it.id == "vits-zh" }
                     if (vits != null) ttsEngine = SherpaTtsEngine(File(modelsRoot(), vits.targetDir))
@@ -86,8 +96,8 @@ class SpeechManager private constructor(private val context: Context) {
     /** 开始语音输入。需外部已授予 RECORD_AUDIO 权限。 */
     fun startListening(onFinal: (String) -> Unit) {
         if (_state.value.listening) return
-        if (!_state.value.modelsReady) {
-            _state.value = _state.value.copy(lastError = "语音模型未就绪，请先到设置下载")
+        if (!_state.value.asrReady) {
+            _state.value = _state.value.copy(lastError = "语音识别模型未就绪，请先到设置下载")
             return
         }
         val engine = asrEngine ?: run {
@@ -124,7 +134,7 @@ class SpeechManager private constructor(private val context: Context) {
     fun speak(text: String, onDone: () -> Unit = {}) {
         val engine = ttsEngine ?: run { refresh(); ttsEngine }
         if (engine == null) {
-            _state.value = _state.value.copy(lastError = "TTS 引擎未初始化")
+            _state.value = _state.value.copy(lastError = if (_state.value.ttsReady) "TTS 引擎未初始化" else "TTS 模型未就绪，请先到设置下载")
             return
         }
         speakJob?.cancel()

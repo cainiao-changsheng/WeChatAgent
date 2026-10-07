@@ -1,3 +1,13 @@
+## 1.0.23 需求集（2026-10-07 追加）
+
+### 语音输入/语音回复就绪状态拆分（修复语音输入被 TTS 阻塞）
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 修复：语音输入被 TTS 模型未就绪阻塞 | `SpeechState` 新增 `asrReady`/`ttsReady`；`SpeechManager.refresh()` 分别计算 ASR（required type=asr）与 TTS（required type=tts）就绪；`startListening` 仅校验 `asrReady`，`speak` 仅校验 `ttsReady`，互不依赖 |
+| 2 | 聊天页判断同步拆分 | `ChatScreen.handleVoiceInput` 改为检查 `speechState.asrReady`（提示“语音识别模型未就绪”）；语音回复朗读条件改用 `speechState.ttsReady` |
+| 3 | 引擎加载按就绪状态独立执行 | `refresh()` 中 ASR 引擎与 TTS 引擎分别按各自就绪状态懒加载，失败仅记录错误不崩溃 |
+
 ## 1.0.22 需求集（2026-10-07 追加）
 
 ### 语音功能（阶段 1）

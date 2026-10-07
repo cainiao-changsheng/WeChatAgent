@@ -190,7 +190,7 @@ fun ChatScreen(
     LaunchedEffect(messages, streamingContent, isLoading) {
         val last = messages.lastOrNull()
         if (last != null && last.role == Role.AGENT && last.id != spokenMessageId &&
-            streamingContent.isBlank() && !isLoading && advSettings.voiceReply && speechState.modelsReady
+            streamingContent.isBlank() && !isLoading && advSettings.voiceReply && speechState.ttsReady
         ) {
             val text = last.content.trim()
             if (text.isNotBlank() && last.imageUri.isBlank()) {

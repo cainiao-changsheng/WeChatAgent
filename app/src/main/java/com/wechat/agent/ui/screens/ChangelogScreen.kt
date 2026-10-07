@@ -70,6 +70,15 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.23",
+                    date = "2026-10-07",
+                    items = listOf(
+                        "修复：语音输入被 TTS 模型未就绪阻塞的问题",
+                        "语音识别（ASR）与语音合成（TTS）就绪状态拆分独立：ASR 模型就绪即可使用语音输入，不再要求 TTS 模型同时就绪；语音回复仅在 TTS 模型就绪时朗读",
+                        "优化：语音设置页分别展示 ASR / TTS 就绪状态"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.22",
                     date = "2026-10-07",
                     items = listOf(
