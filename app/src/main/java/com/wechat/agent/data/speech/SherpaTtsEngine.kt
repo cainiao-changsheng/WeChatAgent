@@ -31,27 +31,23 @@ class SherpaTtsEngine(private val modelDir: File) {
                 throw IllegalStateException("TTS 模型文件缺失：${modelDir.absolutePath}")
             }
             val lexicon = File(modelDir, "lexicon.txt")
-            val vits = OfflineTtsVitsModelConfig(
-                model = modelFile.absolutePath,
-                tokens = tokens.absolutePath,
-                lexicon = if (lexicon.exists()) lexicon.absolutePath else "",
-                dataDir = modelDir.absolutePath,
-                dictDir = "",
-                sid = 0,
-                provider = "cpu",
-                debug = false,
-                numThreads = 1,
-                ruleFsts = "",
-                maxNumSentences = 2,
-                noiseScale = 0.667f,
-                lengthScale = 1.0f
-            )
-            val modelCfg = OfflineTtsModelConfig(
-                vits = vits, kokoro = null,
-                matcha = null, styleMelgan = null,
-                numThreads = 1, debug = false, provider = "cpu"
-            )
-            tts = OfflineTts(OfflineTtsConfig(model = modelCfg, ruleFsts = "", maxNumSentences = 2))
+            val vits = OfflineTtsVitsModelConfig.builder()
+                .setModel(modelFile.absolutePath)
+                .setTokens(tokens.absolutePath)
+                .setLexicon(if (lexicon.exists()) lexicon.absolutePath else "")
+                .setDataDir(modelDir.absolutePath)
+                .build()
+            val modelCfg = OfflineTtsModelConfig.builder()
+                .setVits(vits)
+                .setNumThreads(1)
+                .setDebug(false)
+                .setProvider("cpu")
+                .build()
+            val cfg = OfflineTtsConfig.builder()
+                .setModel(modelCfg)
+                .setMaxNumSentences(2)
+                .build()
+            tts = OfflineTts(assetManager = null, config = cfg)
         }
     }
 
