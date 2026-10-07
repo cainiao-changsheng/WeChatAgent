@@ -153,6 +153,7 @@ fun ChatScreen(
     val advSettings by settingsManager.advancedSettings.collectAsState()
     val speech = remember { SpeechManager.get(context.applicationContext) }
     val speechState by speech.state.collectAsState()
+    LaunchedEffect(Unit) { speech.refresh() }
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* 授权结果在下一次点击时再判断 */ }

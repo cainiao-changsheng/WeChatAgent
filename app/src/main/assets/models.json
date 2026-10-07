@@ -20,11 +20,11 @@
       "name": "sherpa-onnx VITS 中文",
       "version": "v1",
       "required": true,
-      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-ll.tar.bz2",
+      "url": "https://ghfast.top/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-vits-zh-ll.tar.bz2",
       "sha256": "",
       "sizeBytes": 0,
       "archive": "tar.bz2",
-      "targetDir": "vits-zh-ll",
+      "targetDir": "sherpa-onnx-vits-zh-ll",
       "description": "sherpa-onnx VITS 中文 TTS（约 127MB，需解压）"
     },
     {
@@ -33,25 +33,12 @@
       "name": "Kokoro 中英多语言",
       "version": "1.1",
       "required": false,
-      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2",
+      "url": "https://ghfast.top/https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2",
       "sha256": "",
       "sizeBytes": 0,
       "archive": "tar.bz2",
       "targetDir": "kokoro-int8-multi-lang-v1_1",
       "description": "Kokoro 中英 103 说话人（约 300MB，可选兜底）"
-    },
-    {
-      "id": "kittentts-zh",
-      "type": "tts",
-      "name": "KittenTTS 中文",
-      "version": "0.8",
-      "required": false,
-      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kittentts-v0.8-nano-int8.tar.bz2",
-      "sha256": "",
-      "sizeBytes": 0,
-      "archive": "tar.bz2",
-      "targetDir": "kittentts-v0.8-nano-int8",
-      "description": "KittenTTS nano int8（约 25MB，低端兜底）"
     }
   ]
 }

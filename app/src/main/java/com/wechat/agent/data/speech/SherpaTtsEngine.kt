@@ -15,7 +15,7 @@ import java.io.File
 
 /**
  * sherpa-onnx 离线 TTS 引擎（阶段1：VITS-zh-ll 中文）。
- * 模型目录：models/vits-zh-ll（需含 model.onnx / tokens.txt / lexicon.txt / espeak-ng-data）。
+ * 模型目录：models/sherpa-onnx-vits-zh-ll（需含 model.onnx / tokens.txt / lexicon.txt / espeak-ng-data）。
  */
 class SherpaTtsEngine(private val modelDir: File) {
 
@@ -25,7 +25,7 @@ class SherpaTtsEngine(private val modelDir: File) {
 
     fun ensureLoaded() {
         if (tts == null) {
-            val modelFile = File(modelDir, "vits-zh-ll.onnx")
+            val modelFile = File(modelDir, "model.onnx")
             val tokens = File(modelDir, "tokens.txt")
             if (!modelFile.exists() || !tokens.exists()) {
                 throw IllegalStateException("TTS 模型文件缺失：${modelDir.absolutePath}")

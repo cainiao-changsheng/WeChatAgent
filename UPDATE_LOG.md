@@ -1,3 +1,14 @@
+## 1.0.24 需求集（2026-10-08 追加）
+
+### 语音功能三个缺陷修复（按住说话不可用 / 下载无反应 / 解压嵌套）
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 修复：进入聊天页语音输入仍不可用 | `ChatScreen` 进入页面即调用 `speech.refresh()` 刷新 ASR/TTS 就绪状态（此前依赖先进语音设置页才刷新，覆盖安装后直接进聊天页时 `asrReady` 恒为 false，语音输入被拦截） |
+| 2 | 修复：「下载基础语音包」点击无反应 | 根因：VITS 下载地址指向 GitHub 且文件名写错（`vits-zh-ll.tar.bz2` 实际为 `sherpa-onnx-vits-zh-ll.tar.bz2`），国内直连超时且异常被静默吞掉。改为国内可达加速源 `https://ghfast.top/https://github.com/...` 并修正文件名与 `targetDir`（解压目录 `sherpa-onnx-vits-zh-ll`）；`downloadSequential` 下载失败时写入 `DownloadState.Error`，`downloadBaseModels` 同步记录 `lastError`，设置页会显示失败原因而非无反应 |
+| 3 | 修复：模型解压产生嵌套目录导致引擎加载失败 | `extractZip`/`extractTarBz2` 解压前扫描归档条目，自动剥离共享顶层目录（如 `sherpa-onnx-vits-zh-ll/`、`vosk-model-small-cn-0.22/`），模型文件直接落到 `filesDir/models/<targetDir>/`；顺带修正 `SherpaTtsEngine` 硬编码的模型文件名 `vits-zh-ll.onnx` → `model.onnx` |
+| 4 | 移除不存在的可选模型 | KittenTTS 中文模型（`kittentts-zh`）实际不存在（官方仅英文 `kitten-nano-en-v0_1`），从 `models.json` 移除；Kokoro 多语言模型 URL 同步切换加速源 |
+
 ## 1.0.23 需求集（2026-10-07 追加）
 
 ### 语音输入/语音回复就绪状态拆分（修复语音输入被 TTS 阻塞）

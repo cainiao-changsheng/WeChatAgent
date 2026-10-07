@@ -70,6 +70,16 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.24",
+                    date = "2026-10-08",
+                    items = listOf(
+                        "修复：进入聊天页后「按住说话」语音输入按钮可用（自动刷新模型就绪状态，不再依赖先进设置页）",
+                        "修复：「下载基础语音包」点击无反应的问题——下载地址切换国内可访问加速源，修正 VITS 模型文件名与解压目录；下载失败时页面直接显示失败原因",
+                        "修复：模型解压产生嵌套目录导致语音引擎找不到模型文件的问题",
+                        "移除不存在的中文 KittenTTS 可选模型，Kokoro 多语言模型下载源同步切换加速源"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.23",
                     date = "2026-10-07",
                     items = listOf(

@@ -88,7 +88,9 @@ class SpeechManager private constructor(private val context: Context) {
                 refresh()
                 onFinished(true, "")
             } catch (e: Exception) {
-                onFinished(false, e.message ?: "下载失败")
+                val msg = e.message ?: "下载失败"
+                _state.value = _state.value.copy(lastError = "下载失败：$msg")
+                onFinished(false, msg)
             }
         }
     }

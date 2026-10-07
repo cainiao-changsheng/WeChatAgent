@@ -180,15 +180,25 @@ class ModelDownloadManager private constructor(private val context: Context) {
 
     private fun extractZip(src: File, dst: File) {
         ZipInputStream(BufferedInputStream(FileInputStream(src))).use { zis ->
+            val names = mutableListOf<String>()
             var entry = zis.nextEntry
             while (entry != null) {
-                if (!entry.isDirectory) {
-                    val outFile = sanitize(dst, entry.name)
-                    outFile.parentFile?.mkdirs()
-                    BufferedOutputStream(FileOutputStream(outFile)).use { out -> zis.copyTo(out, 64 * 1024) }
-                }
+                if (!entry.isDirectory) names.add(entry.name)
                 zis.closeEntry()
                 entry = zis.nextEntry
+            }
+            val top = commonTopLevel(names)
+            ZipInputStream(BufferedInputStream(FileInputStream(src))).use { zis2 ->
+                var e = zis2.nextEntry
+                while (e != null) {
+                    if (!e.isDirectory) {
+                        val outFile = sanitize(dst, stripTop(e.name, top))
+                        outFile.parentFile?.mkdirs()
+                        BufferedOutputStream(FileOutputStream(outFile)).use { out -> zis2.copyTo(out, 64 * 1024) }
+                    }
+                    zis2.closeEntry()
+                    e = zis2.nextEntry
+                }
             }
         }
     }
@@ -197,17 +207,44 @@ class ModelDownloadManager private constructor(private val context: Context) {
         TarArchiveInputStream(
             BufferedInputStream(BZip2CompressorInputStream(BufferedInputStream(FileInputStream(src))))
         ).use { tis ->
+            val names = mutableListOf<String>()
             var entry = tis.nextEntry
             while (entry != null) {
-                if (!entry.isDirectory) {
-                    val outFile = sanitize(dst, entry.name)
-                    outFile.parentFile?.mkdirs()
-                    BufferedOutputStream(FileOutputStream(outFile)).use { out -> tis.copyTo(out, 64 * 1024) }
-                }
+                if (!entry.isDirectory) names.add(entry.name)
                 entry = tis.nextEntry
+            }
+            val top = commonTopLevel(names)
+            TarArchiveInputStream(
+                BufferedInputStream(BZip2CompressorInputStream(BufferedInputStream(FileInputStream(src))))
+            ).use { tis2 ->
+                var e = tis2.nextEntry
+                while (e != null) {
+                    if (!e.isDirectory) {
+                        val outFile = sanitize(dst, stripTop(e.name, top))
+                        outFile.parentFile?.mkdirs()
+                        BufferedOutputStream(FileOutputStream(outFile)).use { out -> tis2.copyTo(out, 64 * 1024) }
+                    }
+                    e = tis2.nextEntry
+                }
             }
         }
     }
+
+    /** 若所有条目共享同一顶层目录，返回该前缀（如 "vosk-model-small-cn-0.22/"），否则返回 ""。 */
+    private fun commonTopLevel(names: List<String>): String {
+        if (names.isEmpty()) return ""
+        var top: String? = null
+        for (name in names) {
+            val first = name.replace("\\", "/").substringBefore('/')
+            if (first.isBlank()) continue
+            if (top == null) top = first
+            else if (top != first) return ""
+        }
+        return (top ?: "") + "/"
+    }
+
+    private fun stripTop(name: String, top: String): String =
+        if (top.isNotEmpty() && name.startsWith(top)) name.removePrefix(top) else name
 
     /** 防路径穿越：只保留相对路径，剥离 ../。 */
     private fun sanitize(dst: File, name: String): File {
@@ -221,7 +258,13 @@ class ModelDownloadManager private constructor(private val context: Context) {
     suspend fun downloadSequential(models: List<SpeechModel>) {
         for (m in models) {
             if (ModelCatalog.isReady(m, modelsRoot(context))) continue
-            downloadInternal(m)
+            try {
+                downloadInternal(m)
+            } catch (e: Exception) {
+                val msg = e.message ?: e.javaClass.simpleName
+                _state.value = DownloadState.Error(m.id, msg)
+                throw e
+            }
         }
     }
 }
