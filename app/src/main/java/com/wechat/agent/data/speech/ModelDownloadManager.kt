@@ -110,6 +110,10 @@ class ModelDownloadManager private constructor(private val context: Context) {
         val target = File(root, model.targetDir)
         if (ModelCatalog.isReady(model, root)) return // 已就绪
 
+        // 立即进入下载态，确保点击“下载基础语音包”后 UI 立刻切换到进度展示，
+        // 而不是在建立连接（最长 connectTimeout 30s）期间一直停留在 Idle。
+        _state.value = DownloadState.Downloading(model.id, 0f)
+
         val tmp = File(context.cacheDir, model.id + ".part")
         val tmpBak = File(context.cacheDir, model.id + ".part.old")
         if (tmpBak.exists()) tmpBak.delete()
@@ -266,5 +270,7 @@ class ModelDownloadManager private constructor(private val context: Context) {
                 throw e
             }
         }
+        // 全部完成后复位为 Idle，配合 SpeechManager.refresh() 让 UI 显示“已就绪”。
+        _state.value = DownloadState.Idle
     }
 }

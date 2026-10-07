@@ -163,8 +163,8 @@ fun ChatScreen(
             speech.stopListening()
         } else if (!advSettings.voiceInput) {
             Toast.makeText(context, "语音输入未开启，请到 设置-语音功能 开启", Toast.LENGTH_SHORT).show()
-        } else if (!speechState.modelsReady) {
-            Toast.makeText(context, "语音模型未就绪，请到 设置-语音功能 下载", Toast.LENGTH_SHORT).show()
+        } else if (!speechState.asrReady) {
+            Toast.makeText(context, "语音识别模型未就绪，请到 设置-语音功能 下载", Toast.LENGTH_SHORT).show()
         } else {
             val granted = ContextCompat.checkSelfPermission(
                 context, Manifest.permission.RECORD_AUDIO
@@ -379,6 +379,9 @@ fun ChatScreen(
                     emojiSelected = showEmojiPanel,
                     plusMenuExpanded = plusMenuExpanded,
                     onPlusMenuChange = { plusMenuExpanded = it },
+                    voiceListening = speechState.listening,
+                    voicePartialText = speechState.partialText,
+                    onVoiceInput = handleVoiceInput,
                     enabled = true // 回复期间不锁定输入：发新消息即打断当前生成（sendMessage 会 cancel 旧 streamingJob）
                 )
                 AnimatedVisibility(visible = showEmojiPanel) {
@@ -836,12 +839,16 @@ private fun PlusMenuPanel(
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 rowItems.forEach { (label, icon) ->
-                    val isAlbum = label == "相册"
+                    val isActive = label == "相册" || label == "语音输入"
                     Column(
                         modifier = Modifier
                             .weight(1f)
-                            .clickable(enabled = isAlbum) {
-                                if (isAlbum) onPickImage() else onDismiss()
+                            .clickable(enabled = isActive) {
+                                when (label) {
+                                    "相册" -> onPickImage()
+                                    "语音输入" -> onVoiceInput()
+                                    else -> onDismiss()
+                                }
                             }
                             .padding(vertical = 8.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
@@ -851,7 +858,7 @@ private fun PlusMenuPanel(
                                 .size(54.dp)
                                 .clip(RoundedCornerShape(14.dp))
                                 .background(
-                                    if (isAlbum) WeChatGreen.copy(alpha = 0.28f)
+                                    if (isActive) WeChatGreen.copy(alpha = 0.28f)
                                     else Color(0xFF3A3A42)
                                 ),
                             contentAlignment = Alignment.Center
@@ -859,7 +866,7 @@ private fun PlusMenuPanel(
                             Icon(
                                 icon,
                                 contentDescription = label,
-                                tint = if (isAlbum) WeChatGreen else Color.White,
+                                tint = if (isActive) WeChatGreen else Color.White,
                                 modifier = Modifier.size(26.dp)
                             )
                         }
