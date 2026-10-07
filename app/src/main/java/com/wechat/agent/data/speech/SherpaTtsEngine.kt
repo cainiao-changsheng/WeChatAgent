@@ -63,9 +63,9 @@ class SherpaTtsEngine(private val modelDir: File) {
         ensureLoaded()
         val engine = tts ?: return@withContext
         if (text.isBlank()) return@withContext
-        val audio: GeneratedAudio = engine.synthesize(text)
+        val audio: GeneratedAudio = engine.generate(text)
         if (audio.samples == null || audio.samples.isEmpty()) {
-            Log.w(tag, "synthesize returned empty samples: $text")
+            Log.w(tag, "generate returned empty samples: $text")
             return@withContext
         }
         val sr = audio.sampleRate

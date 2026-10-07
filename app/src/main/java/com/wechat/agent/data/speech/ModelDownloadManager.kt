@@ -144,7 +144,7 @@ class ModelDownloadManager private constructor(private val context: Context) {
                 var written = existed
                 val input = body.byteStream()
                 while (true) {
-                    if (!isActive) throw java.util.concurrent.CancellationException()
+                    if (!coroutineContext.isActive) throw java.util.concurrent.CancellationException()
                     val n = input.read(buf)
                     if (n < 0) break
                     raf.write(buf, 0, n)
