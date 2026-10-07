@@ -31,22 +31,22 @@ class SherpaTtsEngine(private val modelDir: File) {
                 throw IllegalStateException("TTS 模型文件缺失：${modelDir.absolutePath}")
             }
             val lexicon = File(modelDir, "lexicon.txt")
-            val vits = OfflineTtsVitsModelConfig.builder()
-                .setModel(modelFile.absolutePath)
-                .setTokens(tokens.absolutePath)
-                .setLexicon(if (lexicon.exists()) lexicon.absolutePath else "")
-                .setDataDir(modelDir.absolutePath)
-                .build()
-            val modelCfg = OfflineTtsModelConfig.builder()
-                .setVits(vits)
-                .setNumThreads(1)
-                .setDebug(false)
-                .setProvider("cpu")
-                .build()
-            val cfg = OfflineTtsConfig.builder()
-                .setModel(modelCfg)
-                .setMaxNumSentences(2)
-                .build()
+            val vits = OfflineTtsVitsModelConfig(
+                model = modelFile.absolutePath,
+                tokens = tokens.absolutePath,
+                lexicon = if (lexicon.exists()) lexicon.absolutePath else "",
+                dataDir = modelDir.absolutePath,
+            )
+            val modelCfg = OfflineTtsModelConfig(
+                vits = vits,
+                numThreads = 1,
+                debug = false,
+                provider = "cpu",
+            )
+            val cfg = OfflineTtsConfig(
+                model = modelCfg,
+                maxNumSentences = 2,
+            )
             tts = OfflineTts(assetManager = null, config = cfg)
         }
     }
