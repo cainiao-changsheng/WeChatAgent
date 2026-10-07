@@ -1,5 +1,6 @@
 package com.wechat.agent.data.speech
 
+import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -37,6 +38,7 @@ class VoskAsrEngine(private val modelDir: File) {
     /**
      * 开始录音识别。回调运行在 IO 线程；partial 实时回调，final 结束时回调一次并停止。
      */
+    @SuppressLint("MissingPermission")
     suspend fun start(
         onPartial: (String) -> Unit,
         onFinal: (String) -> Unit
