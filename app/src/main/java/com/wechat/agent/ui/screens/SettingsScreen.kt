@@ -52,6 +52,7 @@ fun SettingsScreen(
     onOpenUpdateCheck: () -> Unit = {},
     onOpenChangelog: () -> Unit = {},
     onOpenLab: () -> Unit = {},
+    onOpenSpeechSettings: () -> Unit = {},
     bottomBar: @Composable () -> Unit = {}
 ) {
     Scaffold(

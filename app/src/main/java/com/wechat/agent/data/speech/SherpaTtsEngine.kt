@@ -6,11 +6,11 @@ import android.media.AudioTrack
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import sherpa.onnx.GeneratedAudio
-import sherpa.onnx.OfflineTts
-import sherpa.onnx.OfflineTtsConfig
-import sherpa.onnx.OfflineTtsModelConfig
-import sherpa.onnx.OfflineTtsVitsModelConfig
+import com.k2fsa.sherpa.onnx.GeneratedAudio
+import com.k2fsa.sherpa.onnx.OfflineTts
+import com.k2fsa.sherpa.onnx.OfflineTtsConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
+import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import java.io.File
 
 /**

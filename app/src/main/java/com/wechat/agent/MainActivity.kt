@@ -39,6 +39,7 @@ import com.wechat.agent.ui.screens.LogScreen
 import com.wechat.agent.ui.screens.ModelConfigScreen
 import com.wechat.agent.ui.screens.MomentsScreen
 import com.wechat.agent.ui.screens.MyProfileScreen
+import com.wechat.agent.ui.screens.SpeechSettingsScreen
 import com.wechat.agent.ui.screens.SettingsScreen
 import com.wechat.agent.ui.screens.UpdateCheckScreen
 import com.wechat.agent.ui.theme.WeChatAgentTheme
