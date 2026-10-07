@@ -69,9 +69,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.core.content.ContextCompat
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -94,6 +96,7 @@ import com.wechat.agent.data.EmojiSticker
 import com.wechat.agent.data.ImageCacheHelper
 import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.SettingsManager
+import com.wechat.agent.data.speech.SpeechManager
 import com.wechat.agent.data.model.Message
 import com.wechat.agent.data.model.MessageStatus
 import com.wechat.agent.data.model.Role
@@ -141,9 +144,60 @@ fun ChatScreen(
     val context = LocalContext.current
     val settingsManager = remember { SettingsManager.getInstance(context.applicationContext) }
     val advSettings by settingsManager.advancedSettings.collectAsState()
+    val speech = remember { SpeechManager.get(context.applicationContext) }
+    val speechState by speech.state.collectAsState()
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* 授权结果在下一次点击时再判断 */ }
+    val handleVoiceInput: () -> Unit = {
+        plusMenuExpanded = false
+        if (speechState.listening) {
+            speech.stopListening()
+        } else if (!advSettings.voiceInput) {
+            Toast.makeText(context, "语音输入未开启，请到 设置-语音功能 开启", Toast.LENGTH_SHORT).show()
+        } else if (!speechState.modelsReady) {
+            Toast.makeText(context, "语音模型未就绪，请到 设置-语音功能 下载", Toast.LENGTH_SHORT).show()
+        } else {
+            val granted = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            } else {
+                speech.startListening(onFinal = { text ->
+                    Handler(Looper.getMainLooper()).post {
+                        if (text.isNotBlank()) {
+                            inputText = text
+                            onTypingChange(true)
+                        }
+                    }
+                })
+            }
+        }
+    }
     val emojiManager = remember { EmojiManager(context) }
     var stickers by remember { mutableStateOf(emojiManager.getAllStickers()) }
     var showAddStickerDialog by remember { mutableStateOf(false) }
+    // 语音回复：AI 消息生成完成后自动朗读（需开启语音回复且模型就绪）
+    var spokenMessageId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(messages, streamingContent, isLoading) {
+        val last = messages.lastOrNull()
+        if (last != null && last.role == Role.AGENT && last.id != spokenMessageId &&
+            streamingContent.isBlank() && !isLoading && advSettings.voiceReply && speechState.modelsReady
+        ) {
+            val text = last.content.trim()
+            if (text.isNotBlank() && last.imageUri.isBlank()) {
+                spokenMessageId = last.id
+                speech.speak(text)
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            speech.stopListening()
+            speech.stopSpeaking()
+        }
+    }
     var newStickerName by remember { mutableStateOf("") }
     var newStickerShortcut by remember { mutableStateOf("") }
     var pendingStickerPath by remember { mutableStateOf("") }
@@ -648,11 +702,40 @@ fun ChatInputBar(
     emojiSelected: Boolean,
     plusMenuExpanded: Boolean,
     onPlusMenuChange: (Boolean) -> Unit,
+    voiceListening: Boolean = false,
+    voicePartialText: String = "",
+    onVoiceInput: () -> Unit = {},
     enabled: Boolean
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface)
     ) {
+        // 语音输入状态条：聆听中实时显示识别文本
+        AnimatedVisibility(
+            visible = voiceListening,
+            enter = fadeIn() + expandVertically(),
+            exit = fadeOut() + shrinkVertically()
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Mic,
+                    contentDescription = null,
+                    tint = WeChatGreen,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    if (voicePartialText.isBlank()) "正在聆听…（再点一次“语音输入”结束）"
+                    else "聆听中：$voicePartialText",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    maxLines = 2
+                )
+            }
+        }
         // ➕ 展开的更多面板（参考图：2 行 × 4 列，深色圆角按钮）
         AnimatedVisibility(
             visible = plusMenuExpanded,
@@ -660,7 +743,8 @@ fun ChatInputBar(
         ) {
             PlusMenuPanel(
                 onDismiss = { onPlusMenuChange(false) },
-                onPickImage = { onPlusMenuChange(false); onPickImage() }
+                onPickImage = { onPlusMenuChange(false); onPickImage() },
+                onVoiceInput = { onVoiceInput() }
             )
         }
 
@@ -714,11 +798,12 @@ fun ChatInputBar(
     }
 }
 
-/** ➕ 更多面板：深色底 2×4 网格按钮，参考图（2515.jpg）排版；仅“相册”可用（发送图片）。 */
+/** ➕ 更多面板：深色底 2×4 网格按钮，参考图（2515.jpg）排版；“相册”“语音输入”可用。 */
 @Composable
 private fun PlusMenuPanel(
     onDismiss: () -> Unit,
-    onPickImage: () -> Unit
+    onPickImage: () -> Unit,
+    onVoiceInput: () -> Unit
 ) {
     val items = listOf(
         "相册" to Icons.Default.Image,

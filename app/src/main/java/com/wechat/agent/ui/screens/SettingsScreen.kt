@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -120,6 +121,16 @@ fun SettingsScreen(
                         title = "实验室",
                         subtitle = "新功能尝鲜入口，稳定后移至正式位置",
                         onClick = onOpenLab
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                    )
+                    SettingsMenuItem(
+                        icon = { Icon(Icons.Default.Mic, contentDescription = null, tint = WeChatGreen) },
+                        title = "语音功能",
+                        subtitle = "语音输入 / 语音回复 / 语音模型下载",
+                        onClick = onOpenSpeechSettings
                     )
                 }
             }

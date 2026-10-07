@@ -11,8 +11,8 @@ android {
         applicationId = "com.wechat.agent"
         minSdk = 26
         targetSdk = 35
-        versionCode = 21
-        versionName = "1.0.21"
+        versionCode = 22
+        versionName = "1.0.22"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -100,6 +100,10 @@ dependencies {
 
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.6.0")
+    // 语音输入（ASR）与语音回复（TTS）
+    implementation("com.alphacephei:vosk-android:0.3.47")
+    implementation("com.github.k2-fsa.sherpa-onnx:sherpa-onnx:v1.13.5")
+    implementation("org.apache.commons:commons-compress:1.28.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

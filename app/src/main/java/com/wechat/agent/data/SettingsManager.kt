@@ -79,7 +79,11 @@ data class AdvancedSettings(
     val thinkDisplay: Boolean = true,
     val autoCollapseThinking: Boolean = false,
     /** Agent 模式：聊天时向大模型暴露只读工具（时间/屏幕使用时间/记忆查询），模型可主动调用。 */
-    val agentTools: Boolean = true
+    val agentTools: Boolean = true,
+    /** 语音输入开关：开启后更多面板“语音输入”可用。 */
+    val voiceInput: Boolean = true,
+    /** 语音回复开关：开启后 AI 回复自动朗读。 */
+    val voiceReply: Boolean = false
 )
 
 class SettingsManager private constructor(private val context: Context) {
@@ -320,7 +324,9 @@ class SettingsManager private constructor(private val context: Context) {
             splitMessages = profilePrefs.getBoolean("adv_split_messages", false),
             thinkDisplay = profilePrefs.getBoolean("adv_think_display", true),
             autoCollapseThinking = profilePrefs.getBoolean("adv_auto_collapse_think", false),
-            agentTools = profilePrefs.getBoolean("adv_agent_tools", true)
+            agentTools = profilePrefs.getBoolean("adv_agent_tools", true),
+            voiceInput = profilePrefs.getBoolean("adv_voice_input", true),
+            voiceReply = profilePrefs.getBoolean("adv_voice_reply", false)
         )
     }
 

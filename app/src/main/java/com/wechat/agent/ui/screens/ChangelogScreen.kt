@@ -70,6 +70,17 @@ fun ChangelogScreen(
         ) {
             val changelog = listOf(
                 ChangelogEntry(
+                    version = "v1.0.22",
+                    date = "2026-10-07",
+                    items = listOf(
+                        "新增：语音功能（阶段 1）",
+                        "语音输入：长按「更多面板 → 语音输入」录音，Vosk 实时识别并显示识别文本，支持点击结束",
+                        "语音回复：设置中开启后，AI 回复自动用 VITS 合成语音播放，可播放/停止",
+                        "语音设置页：设置 → 语音功能，支持语音输入/语音回复开关与语音模型下载（Vosk 中文识别模型 + VITS 中文语音合成模型）",
+                        "模型按需下载到应用私有目录（filesDir/models），支持断点续传、zip/tar.bz2 自动解压与 sha256 校验"
+                    )
+                ),
+                ChangelogEntry(
                     version = "v1.0.21",
                     date = "2026-10-01",
                     items = listOf(

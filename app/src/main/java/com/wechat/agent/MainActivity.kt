@@ -353,7 +353,14 @@ fun AppNavigation() {
                 onOpenModelConfig = { navController.navigate("modelConfig") },
                 onOpenUpdateCheck = { navController.navigate("updateCheck") },
                 onOpenChangelog = { navController.navigate("changelog") },
-                onOpenLab = { navController.navigate("lab") }
+                onOpenLab = { navController.navigate("lab") },
+                onOpenSpeechSettings = { navController.navigate("speechSettings") }
+            )
+        }
+
+        composable("speechSettings") {
+            SpeechSettingsScreen(
+                onBack = { navController.popBackStack() }
             )
         }
 

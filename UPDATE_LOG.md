@@ -1,3 +1,15 @@
+## 1.0.22 需求集（2026-10-07 追加）
+
+### 语音功能（阶段 1）
+
+| # | 更新内容 | 实现方法 |
+|---|---------|---------|
+| 1 | 新增语音输入：更多面板「语音输入」录音，Vosk 实时识别 | 依赖 `com.alphacephei:vosk-android:0.3.47`；`RECORD_AUDIO` 权限；`VoskAsrEngine` 封装识别，`ChatScreen` 更多面板「语音输入」可用，录音中实时显示 partial 识别文本，再次点击结束并发送 |
+| 2 | 新增语音回复：AI 回复自动 VITS 合成播放 | 依赖 `com.github.k2-fsa.sherpa-onnx:sherpa-onnx:v1.13.5`（VITS 中文语音合成）；`SherpaTtsEngine` 合成并播放，`ChatScreen` 回复气泡提供播放/停止 |
+| 3 | 语音设置页：开关 + 模型下载 | `SpeechSettingsScreen`（设置 → 语音功能）支持语音输入/语音回复开关与模型下载状态；`SettingsScreen` 加入口，`MainActivity` 加 `speechSettings` 路由 |
+| 4 | 模型按需下载到私有目录 | `ModelCatalog`/`ModelDownloadManager`：模型根目录 `filesDir/models`（覆盖安装不丢），支持断点续传、`zip`/`tar.bz2` 自动解压、sha256 校验（空则跳过）；`SpeechManager` 单例协调 ASR/TTS 与下载状态 |
+| 5 | 模型清单 | Vosk 中文识别模型 `vosk-model-small-cn-0.22`（zip，16k）；VITS 中文语音合成模型 `vits-zh-ll`（tar.bz2，22.05k）；APK 可覆盖安装，模型暂不内置 Debug 包，按需下载 |
+
 ## 1.0.21 需求集（2026-10-01 追加）
 
 ### 编辑 AI 好友页新增「大模型提示词」输入框

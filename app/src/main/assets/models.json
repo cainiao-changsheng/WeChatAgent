@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "vosk-cn",
+      "type": "asr",
+      "name": "Vosk 中文语音识别",
+      "version": "0.22",
+      "required": true,
+      "url": "https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip",
+      "sha256": "",
+      "sizeBytes": 0,
+      "archive": "zip",
+      "targetDir": "vosk-model-small-cn-0.22",
+      "description": "Vosk 中文小模型（阶段1唯一 ASR，约 42MB）"
+    },
+    {
+      "id": "vits-zh",
+      "type": "tts",
+      "name": "sherpa-onnx VITS 中文",
+      "version": "v1",
+      "required": true,
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-ll.tar.bz2",
+      "sha256": "",
+      "sizeBytes": 0,
+      "archive": "tar.bz2",
+      "targetDir": "vits-zh-ll",
+      "description": "sherpa-onnx VITS 中文 TTS（约 127MB，需解压）"
+    },
+    {
+      "id": "kokoro-multi",
+      "type": "tts",
+      "name": "Kokoro 中英多语言",
+      "version": "1.1",
+      "required": false,
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-int8-multi-lang-v1_1.tar.bz2",
+      "sha256": "",
+      "sizeBytes": 0,
+      "archive": "tar.bz2",
+      "targetDir": "kokoro-int8-multi-lang-v1_1",
+      "description": "Kokoro 中英 103 说话人（约 300MB，可选兜底）"
+    },
+    {
+      "id": "kittentts-zh",
+      "type": "tts",
+      "name": "KittenTTS 中文",
+      "version": "0.8",
+      "required": false,
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kittentts-v0.8-nano-int8.tar.bz2",
+      "sha256": "",
+      "sizeBytes": 0,
+      "archive": "tar.bz2",
+      "targetDir": "kittentts-v0.8-nano-int8",
+      "description": "KittenTTS nano int8（约 25MB，低端兜底）"
+    }
+  ]
+}
