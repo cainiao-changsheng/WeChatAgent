@@ -25,6 +25,7 @@ import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.ObservationEntry
 import com.wechat.agent.data.ObservationStore
 import com.wechat.agent.data.PhoneControl
+import com.wechat.agent.data.ScreenCaptureManager
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.SoulManager
 import com.wechat.agent.data.TypingHabitTracker
@@ -931,7 +932,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             musicControlProvider = { action -> controlMusic(action) },
                             volumeControlProvider = { action -> adjustVolume(action) },
                             openAppProvider = { name -> openApp(name) },
-                            phoneControlProvider = { action -> requestPhoneControl(action) }
+                            phoneControlProvider = { action -> requestPhoneControl(action) },
+                            captureScreenProvider = { captureScreenForAgent() }
                         )
                     )
                     val agentCollect: suspend (AgentStreamPiece) -> Unit = { piece ->
@@ -1296,6 +1298,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun requestPhoneControl(action: String): String {
         return PhoneControl.request(getApplication<Application>(), action)
+    }
+
+    /**
+     * Agent 工具：截取当前屏幕，交给视觉模型理解后返回画面描述。
+     * 系统的 MediaProjection 授权弹窗即「用户确认」闸——不点同意拿不到任何画面。
+     */
+    private suspend fun captureScreenForAgent(): String {
+        val path = ScreenCaptureManager.capture(getApplication<Application>())
+            ?: return "未能获取屏幕截图：对方可能拒绝了系统授权，或截图超时失败。"
+        val dataUrl = readImageAsBase64(path)
+        if (dataUrl == null) {
+            return "屏幕截图已保存，但图片读取失败，无法识图。"
+        }
+        val description = repository.sendVisionMessage(
+            getModelName(), getApiKey(),
+            "这是手机当前的屏幕截图。请准确、简洁地描述画面内容：正在使用哪个应用、当前处于什么页面/界面、显示了哪些关键文字或信息。只描述客观可见的内容，不要臆测画面之外的东西。",
+            dataUrl
+        ).getOrNull()?.takeIf { it.isNotBlank() }
+        return if (description == null) {
+            "已截取屏幕，但当前模型暂不支持识图或识图失败，无法描述画面。"
+        } else {
+            "屏幕截图已获取，画面内容如下（请据此自然回应用户）：\n$description"
+        }
     }
 
     /** "发现"页：加载选中好友的历史观察记录（时间倒序）。 */

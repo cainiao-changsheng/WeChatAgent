@@ -42,7 +42,8 @@ object AgentToolRegistry {
         musicControlProvider: suspend (String) -> String,
         volumeControlProvider: suspend (String) -> String,
         openAppProvider: suspend (String) -> String,
-        phoneControlProvider: suspend (String) -> String
+        phoneControlProvider: suspend (String) -> String,
+        captureScreenProvider: suspend () -> String
     ): List<AgentToolSpec> = listOf(
         AgentToolSpec(
             name = "get_current_time",
@@ -249,6 +250,16 @@ object AgentToolRegistry {
                 val action = (args["action"] as? String)?.trim()?.lowercase() ?: ""
                 phoneControlProvider(action)
             }
+        ),
+        AgentToolSpec(
+            name = "capture_screen",
+            description = "截取对方手机当前屏幕，用于「看见」对方正在看的内容并据此自然回应。仅在对方明确示意你看他/她屏幕（如说“你看看我屏幕”“帮我看看这个”“现在这个页面怎么样”）时才调用；每调用一次都会弹出系统授权，对方同意后才截图，绝不会静默截取。",
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to emptyMap<String, Any>(),
+                "required" to emptyList<String>()
+            ),
+            executor = { _ -> captureScreenProvider() }
         )
     )
 }

@@ -290,6 +290,7 @@ class ChatRepository(
         "get_current_time" -> "正在查看时间…"
         "query_screen_time" -> "正在查看屏幕使用时间…"
         "recall_memory" -> "正在回忆与你的记忆…"
+        "capture_screen" -> "正在截取屏幕…"
         else -> "正在执行 $name…"
     }
 

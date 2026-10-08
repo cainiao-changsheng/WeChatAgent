@@ -32,6 +32,13 @@
             </intent-filter>
         </activity>
 
+        <!-- 一次性屏幕截图：弹系统 MediaProjection 授权并截取一帧，透明无 UI，用完即退 -->
+        <activity
+            android:name=".ScreenCaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
