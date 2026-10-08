@@ -41,7 +41,8 @@ object AgentToolRegistry {
         nowPlayingProvider: suspend () -> String,
         musicControlProvider: suspend (String) -> String,
         volumeControlProvider: suspend (String) -> String,
-        openAppProvider: suspend (String) -> String
+        openAppProvider: suspend (String) -> String,
+        phoneControlProvider: suspend (String) -> String
     ): List<AgentToolSpec> = listOf(
         AgentToolSpec(
             name = "get_current_time",
@@ -229,6 +230,24 @@ object AgentToolRegistry {
             executor = { args ->
                 val appName = (args["appName"] as? String)?.trim() ?: ""
                 openAppProvider(appName)
+            }
+        ),
+        AgentToolSpec(
+            name = "control_phone",
+            description = "请求在对方手机上执行一个安全导航操作。action 取值：home（回到桌面）、back（返回上一页）、recents（打开最近任务）、notifications（打开通知栏）、quick_settings（打开快捷设置）、lock_screen（锁屏）。仅在对方明确要你帮忙操作手机（如“帮我回桌面”“打开通知栏”）时调用；本工具不会立即执行，会先向用户请求确认，用户同意后才生效。绝不执行转账、发短信、拨打电话、删除等高风险操作。",
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "action" to mapOf(
+                        "type" to "string",
+                        "description" to "要执行的手机操作：home / back / recents / notifications / quick_settings / lock_screen。"
+                    )
+                ),
+                "required" to listOf("action")
+            ),
+            executor = { args ->
+                val action = (args["action"] as? String)?.trim()?.lowercase() ?: ""
+                phoneControlProvider(action)
             }
         )
     )

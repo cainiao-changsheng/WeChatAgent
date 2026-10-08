@@ -17,4 +17,6 @@
     <string name="agent_name">AI 助手</string>
     <string name="empty_chat_hint">发送一条消息开始对话</string>
     <string name="send">发送</string>
+    <string name="accessibility_service_label">心语·无障碍手机操控</string>
+    <string name="accessibility_service_description">允许“心语”中的 AI 在征得你同意后，代为执行回到桌面、返回上一页、打开通知栏等安全导航操作。本服务不会读取你的屏幕内容，也不会执行转账、发短信、拨打电话、删除等高风险操作。</string>
 </resources>

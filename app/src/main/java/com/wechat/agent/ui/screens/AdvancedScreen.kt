@@ -2,6 +2,7 @@ package com.wechat.agent.ui.screens
 
 import android.content.Context
 import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -51,7 +52,10 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.graphics.drawable.IconCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.wechat.agent.data.AdvancedSettings
+import com.wechat.agent.data.PhoneControl
 import com.wechat.agent.ui.components.CenteredTopBar
 import com.wechat.agent.viewmodel.SettingsViewModel
 import kotlinx.coroutines.launch
@@ -104,6 +108,12 @@ fun AdvancedScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+
+    // 无障碍手机操控授权状态；授权页返回（ON_RESUME）后自动刷新
+    var accessibilityGranted by remember { mutableStateOf(PhoneControl.isAccessibilityGranted(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        accessibilityGranted = PhoneControl.isAccessibilityGranted(context)
+    }
 
     LaunchedEffect(initial) {
         streamEnabled = initial.streamEnabled
@@ -322,7 +332,23 @@ fun AdvancedScreen(
                     onCheckedChange = { agentTools = it; saveSettings() }
                 )
 
-                // 10. 单角色模式
+                // 10. 无障碍手机操控（安全导航 + 操作前确认）
+                AdvancedPermissionRow(
+                    title = "无障碍手机操控",
+                    subtitle = if (accessibilityGranted)
+                        "已授权：AI 可代为执行回桌面/返回/通知栏等安全操作，每次操作前都会先征求你同意"
+                    else
+                        "未授权：仅限安全导航操作，不读取屏幕内容，操作前需你确认；点击去系统设置开启",
+                    granted = accessibilityGranted,
+                    onClick = {
+                        runCatching { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
+                            .onFailure {
+                                scope.launch { snackbarHostState.showSnackbar("无法打开无障碍设置") }
+                            }
+                    }
+                )
+
+                // 11. 单角色模式
                 AdvancedSwitchRow(
                     title = "单角色模式",
                     subtitle = "开启后锁定为默认角色，隐藏新增/切换角色入口，只保留单一自我状态",
@@ -444,6 +470,41 @@ private fun AdvancedActionRow(
             contentDescription = null,
             tint = AccentPurple,
             modifier = Modifier.size(20.dp)
+        )
+    }
+    Spacer(modifier = Modifier.height(10.dp))
+}
+
+/** 权限行：标题 + 副标题 + 右侧授权状态（点击跳转系统设置） */
+@Composable
+private fun AdvancedPermissionRow(
+    title: String,
+    subtitle: String,
+    granted: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(RowBg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 13.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = Color(0xFFE8E8F0))
+            if (subtitle.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(subtitle, style = MaterialTheme.typography.labelSmall, color = SubText)
+            }
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            if (granted) "已授权" else "去授权",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = if (granted) AccentPurple else Color(0xFFE88B8B)
         )
     }
     Spacer(modifier = Modifier.height(10.dp))

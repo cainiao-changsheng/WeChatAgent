@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  无障碍手机操控服务配置：
+  - 不读取窗口内容（canRetrieveWindowContent=false），只允许执行安全全局动作（回桌面/返回/通知栏等）；
+  - 因此本服务不会抓取屏幕文字，无法偷看密码/聊天内容，从设计上规避高风险泄露。
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="false"
+    android:description="@string/accessibility_service_description"
+    android:notificationTimeout="100"
+    android:settingsActivity="com.wechat.agent.MainActivity" />

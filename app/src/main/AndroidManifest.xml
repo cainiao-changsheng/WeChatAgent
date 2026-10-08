@@ -50,6 +50,25 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <!-- 无障碍手机操控：仅执行安全全局动作，需用户到系统设置手动授权；动作执行前须经 PhoneControl 确认 -->
+        <service
+            android:name=".data.AgentAccessibilityService"
+            android:exported="true"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/agent_accessibility_config" />
+        </service>
+
+        <!-- 手机操控确认（同意/拒绝）回调接收器，仅本应用内部 PendingIntent 触发 -->
+        <receiver
+            android:name=".data.PhoneControlReceiver"
+            android:exported="false" />
     </application>
 
     <!-- 热恋模式：可见性声明，用于列出并控制已安装的常见音乐 App -->

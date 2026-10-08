@@ -24,6 +24,7 @@ import com.wechat.agent.data.LifeDecisionEngine
 import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.ObservationEntry
 import com.wechat.agent.data.ObservationStore
+import com.wechat.agent.data.PhoneControl
 import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.data.SoulManager
 import com.wechat.agent.data.TypingHabitTracker
@@ -929,7 +930,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             nowPlayingProvider = { formatNowPlaying() },
                             musicControlProvider = { action -> controlMusic(action) },
                             volumeControlProvider = { action -> adjustVolume(action) },
-                            openAppProvider = { name -> openApp(name) }
+                            openAppProvider = { name -> openApp(name) },
+                            phoneControlProvider = { action -> requestPhoneControl(action) }
                         )
                     )
                     val agentCollect: suspend (AgentStreamPiece) -> Unit = { piece ->
@@ -1286,6 +1288,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         } catch (_: Exception) {
             "打开应用失败：$query"
         }
+    }
+
+    /**
+     * Agent 工具：请求执行一个安全手机导航操作（回桌面/返回等）。
+     * 不直接执行——交给 [PhoneControl] 做「高风险拦截 + 白名单校验 + 用户确认」后才真正动作。
+     */
+    private fun requestPhoneControl(action: String): String {
+        return PhoneControl.request(getApplication<Application>(), action)
     }
 
     /** "发现"页：加载选中好友的历史观察记录（时间倒序）。 */
