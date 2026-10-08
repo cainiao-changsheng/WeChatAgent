@@ -67,6 +67,13 @@ object PhoneControl {
     fun isAccessibilityGranted(context: Context): Boolean =
         AgentAccessibilityService.isServiceEnabled(context)
 
+    /** 通知权限是否已授予（Android 13+ 才需动态授权；13 以下默认可用）。 */
+    fun isNotificationGranted(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT < 33) return true
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
     /**
      * Agent 请求执行一个手机操作。返回给模型的文案（模型据此继续与用户对话）。
      * 该方法**只进入确认流程，绝不直接执行**。
@@ -131,11 +138,7 @@ object PhoneControl {
         }
     }
 
-    private fun canNotify(context: Context): Boolean {
-        if (Build.VERSION.SDK_INT < 33) return true
-        return ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-    }
+    private fun canNotify(context: Context): Boolean = isNotificationGranted(context)
 
     private fun decideIntent(context: Context, requestId: String, approved: Boolean): PendingIntent {
         val intent = Intent(context, PhoneControlReceiver::class.java).apply {

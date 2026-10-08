@@ -46,6 +46,9 @@ class ChatRepository(
     /** M4 自我认知画像（由 ViewModel 每轮注入，保持回复与自我认知自洽）。 */
     var selfModelPrompt: String = ""
 
+    /** 由 ViewModel 每轮注入：当前设备「能力 + 权限状态」说明，让模型知道自己的真实能力、不被问到就装不会，缺权限时主动引导授权。 */
+    var deviceCapabilityHint: String = ""
+
     /** 记录不支持 function calling 的模型名，避免每次请求重复触发 400。 */
     private val toolsUnsupportedModels = java.util.Collections.synchronizedSet(java.util.HashSet<String>())
     /** Agent 执行最大轮数（含工具调用轮），防止死循环。 */
@@ -74,9 +77,13 @@ class ChatRepository(
             appendLine()
             appendLine("【回复原则 - 快速直接】")
             appendLine("1. 看到对方消息后直接给出自然回复，不要长篇分析、不要内心独白、不要反复推敲。")
-            appendLine("2. 除非确实需要（查时间、查记忆、找表情）才调用工具；普通闲聊一律直接回答，禁止每条消息都调用工具。")
+            appendLine("2. 除非确实需要（查时间、查记忆、找表情、截图、手机操作、打开应用、音乐/音量）才调用工具；普通闲聊一律直接回答，禁止每条消息都调用工具。")
             appendLine("3. 回复简短自然，像微信聊天，一两句说清即可，不要绕圈子。")
             appendLine()
+            if (deviceCapabilityHint.isNotBlank()) {
+                appendLine(deviceCapabilityHint)
+                appendLine()
+            }
             if (personaPrompt.isNotBlank()) {
                 appendLine(personaPrompt)
                 appendLine()

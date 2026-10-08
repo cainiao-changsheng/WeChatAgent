@@ -891,9 +891,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 repository.soulPrompt = soulManager.readSoul(chatAgentId.orEmpty())
                 repository.selfModelPrompt = memoryManager.loadSelfModel().toPrompt()
                 repository.metacognitionGuidance = metacognitionTracker.guidance()
+                val advanced = settingsManager.getAdvancedSettingsSync()
+                val isFlashModel = model.lowercase().contains("flash")
+                repository.deviceCapabilityHint =
+                    buildDeviceCapabilityHint(advanced.agentTools && !isFlashModel)
                 val chatMessages = repository.buildChatMessages(model, _currentMessages.value, emotionDesc, moodDesc)
 
-                val advanced = settingsManager.getAdvancedSettingsSync()
                 val simulateJob = if (advanced.thinkDisplay) {
                     viewModelScope.launch {
                         delay(600)
@@ -905,7 +908,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 // flash 类快速模型定位是「秒回」直聊，function calling 的多轮往返会把它拖慢并放大超时风险，
                 // 因此 flash 模型一律走下方纯流式分支，不注入工具。深度思考/大模型如需 Agent 能力再启用会兜底。
-                val isFlashModel = model.lowercase().contains("flash")
                 if (advanced.agentTools && !isFlashModel) {
                     // Agent 模式（流式）：SSE 实时输出思考/正文，工具调用自动执行，单轮 45s 护栏防死循环
                     val agentFlow = repository.sendAgentMessageStream(
@@ -1320,6 +1322,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             "已截取屏幕，但当前模型暂不支持识图或识图失败，无法描述画面。"
         } else {
             "屏幕截图已获取，画面内容如下（请据此自然回应用户）：\n$description"
+        }
+    }
+
+    /**
+     * 组装「真实能力 + 当前权限状态」说明，注入系统提示。
+     * 让模型知道自己确实能截图/锁屏/开应用/调音量，别被问到就装不会；缺权限时主动引导授权而非直接说做不了。
+     * enabled=false 表示本轮不启用工具（flash/未开关），返回空串不注入。
+     */
+    private fun buildDeviceCapabilityHint(enabled: Boolean): String {
+        if (!enabled) return ""
+        val ctx = getApplication<Application>()
+        val acc = PhoneControl.isAccessibilityGranted(ctx)
+        val notif = PhoneControl.isNotificationGranted(ctx)
+        return buildString {
+            appendLine("【你的真实能力与权限状态】")
+            appendLine("你其实具备这些真实能力（通过对方手机上的辅助工具实现，不是你亲手操作）：")
+            appendLine("- 截图看屏幕：对方同意后即可截取当前画面（工具 capture_screen）。")
+            appendLine("- 手机安全操作：回到桌面 / 返回上一页 / 打开最近任务 / 弹出通知栏 / 快捷设置 / 锁屏（工具 control_phone）。")
+            appendLine("- 打开应用：帮对方打开某个 App（工具 open_app）。")
+            appendLine("- 音乐与音量：查询正在播放 / 播放暂停切歌 / 调音量（工具 now_playing / music_control / volume_control）。")
+            appendLine("当对方问你“能不能截图 / 锁屏 / 打开某某”时，不要否认能力、不要装不会，据实说可以，并在对方要你做时调用对应工具。")
+            appendLine("这些动作每次执行前都会征求对方同意（截图弹系统授权、手机操作发确认通知），不会静默执行。")
+            appendLine()
+            appendLine("当前权限状态：")
+            appendLine(
+                if (acc) "- 无障碍权限：已授权（手机操作、打开应用可直接用）。"
+                else "- 无障碍权限：未授权（要用手机操作/打开应用时，先引导对方到 设置 → 无障碍 里开启，再调用工具）。"
+            )
+            appendLine(
+                if (notif) "- 通知权限：已开启。"
+                else "- 通知权限：未开启（手机操作无法弹「同意/拒绝」确认，需先引导对方开启通知权限）。"
+            )
         }
     }
 
@@ -1877,6 +1911,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 repository.soulPrompt = soulManager.readSoul(chatAgentId.orEmpty())
                 repository.selfModelPrompt = memoryManager.loadSelfModel().toPrompt()
                 repository.metacognitionGuidance = metacognitionTracker.guidance()
+                repository.deviceCapabilityHint = ""
                 val imageDataUrl = readImageAsBase64(cachedUri)
                 val replyFlow = if (imageDataUrl != null) {
                     repository.sendVisionMessageStream(
