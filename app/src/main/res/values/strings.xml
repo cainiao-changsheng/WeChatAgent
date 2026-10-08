@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">智能助手</string>
+    <string name="app_name">心语</string>
     <string name="chat_list_title">消息</string>
     <string name="contacts_title">通讯录</string>
     <string name="discover_title">发现</string>

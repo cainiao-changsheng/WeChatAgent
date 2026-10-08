@@ -1,16 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 心语 启动图标前景：白色聊天气泡 + 玫瑰色心形（心 + 语） -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- 聊天气泡 -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,28 C40.745,28 30,37.297 30,48.8 C30,55.022 33.047,60.649 37.8,64.54 L36,72 L43.2,68.14 C46.15,69.15 49.4,69.6 52.8,69.6 C53.2,69.6 53.6,69.58 54,69.56 C54,69.58 54,69.6 54,69.6 C66.274,69.6 76.6,59.274 76.6,46.8 C76.6,34.326 66.274,24 54,24 C53.607,24 53.215,24.007 52.825,24.021 C53.212,25.313 53.4,26.655 53.4,28 C53.4,27.333 53.6,27.667 54,28 Z"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M42,42 L66,42 A3,3 0 0,1 69,45 L69,45 A3,3 0 0,1 66,48 L42,48 A3,3 0 0,1 39,45 L39,45 A3,3 0 0,1 42,42 Z"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M42,52 L58,52 A2,2 0 0,1 60,54 L60,54 A2,2 0 0,1 58,56 L42,56 A2,2 0 0,1 40,54 L40,54 A2,2 0 0,1 42,52 Z"/>
+        android:pathData="M39,38 H69 C73.97,38 78,42.03 78,47 V60 C78,64.97 73.97,69 69,69 H47 L40,76 L44,69 H39 C34.03,69 30,64.97 30,60 V47 C30,42.03 34.03,38 39,38 Z" />
+    <!-- 气泡内的心形 -->
+    <group
+        android:translateX="46"
+        android:translateY="44.82"
+        android:scaleX="0.67"
+        android:scaleY="0.67">
+        <path
+            android:fillColor="#FF4F6E"
+            android:pathData="M12,21.35 L10.55,20.03 C5.4,15.36 2,12.28 2,8.5 C2,5.42 4.42,3 7.5,3 C9.24,3 10.91,3.81 12,5.09 C13.09,3.81 14.76,3 16.5,3 C19.58,3 22,5.42 22,8.5 C22,12.28 18.6,15.36 13.45,20.04 L12,21.35 Z" />
+    </group>
 </vector>

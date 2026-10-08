@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 心语 启动图标背景：暖玫瑰渐变，呼应「心」 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="315"
+        android:type="linear"
+        android:startColor="#FFB0C2"
+        android:centerColor="#FF7D96"
+        android:endColor="#FF4F6E" />
+</shape>
