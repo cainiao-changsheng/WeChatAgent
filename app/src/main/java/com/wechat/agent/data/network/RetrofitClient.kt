@@ -29,7 +29,9 @@ object RetrofitClient {
         OkHttpClient.Builder()
             .addInterceptor(logging)
             .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            // 思考类模型在思考阶段可能长时间不推送数据，60s 过短会被误判为超时断开；
+            // 放宽到 300s，真正的超时控制交给上层 REPLY_TIMEOUT_MS / 高级设置“停用超时”。
+            .readTimeout(300, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .build()
     }

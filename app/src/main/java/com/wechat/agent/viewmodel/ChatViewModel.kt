@@ -882,7 +882,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 } else null
 
-                if (advanced.agentTools) {
+                // flash 类快速模型定位是「秒回」直聊，function calling 的多轮往返会把它拖慢并放大超时风险，
+                // 因此 flash 模型一律走下方纯流式分支，不注入工具。深度思考/大模型如需 Agent 能力再启用会兜底。
+                val isFlashModel = model.lowercase().contains("flash")
+                if (advanced.agentTools && !isFlashModel) {
                     // Agent 模式（流式）：SSE 实时输出思考/正文，工具调用自动执行，单轮 45s 护栏防死循环
                     val agentFlow = repository.sendAgentMessageStream(
                         model = model,
