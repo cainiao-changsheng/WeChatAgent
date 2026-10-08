@@ -740,7 +740,7 @@ fun MessageBubble(
                             onLongPress = { showMenu = true }
                         )
                     }
-                    message.audioUri.isNotEmpty() -> {
+                    isUser && message.audioUri.isNotEmpty() -> {
                         VoiceMessageBubble(
                             audioUri = message.audioUri,
                             durationMs = message.audioDurationMs,

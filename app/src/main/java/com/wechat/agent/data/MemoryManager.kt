@@ -93,6 +93,11 @@ class MemoryManager(context: Context) {
     }
 
     suspend fun addMemory(entry: MemoryEntry) = mutex.withLock {
+        addMemoryLocked(entry)
+    }
+
+    /** 在已持有 mutex 锁的前提下写入记忆（不重复加锁）。 */
+    private fun addMemoryLocked(entry: MemoryEntry) {
         val list = loadMemory(entry.type).toMutableList()
         list.add(0, entry)
         if (entry.type == MemoryType.L0_INSTANT && list.size > 30) {
@@ -129,7 +134,8 @@ class MemoryManager(context: Context) {
             emotion = emotion,
             importance = importance
         )
-        addMemory(entry)
+        // 注意：不能调用 addMemory(entry)，否则同一协程对 mutex 重入加锁会导致死锁
+        addMemoryLocked(entry)
     }
 
     fun addMemorySync(entry: MemoryEntry) {
@@ -238,7 +244,7 @@ class MemoryManager(context: Context) {
         val backup = MemoryBackup(
             version = 1,
             exportedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
-            emotion = loadEmotion(),
+            emotion = loadEmotionSync(),
             memories = mapOf(
                 MemoryType.L0_INSTANT.name to loadMemory(MemoryType.L0_INSTANT),
                 MemoryType.L1_DAILY.name to loadMemory(MemoryType.L1_DAILY),
@@ -250,7 +256,7 @@ class MemoryManager(context: Context) {
 
     suspend fun exportMarkdown(): String = mutex.withLock {
         val sb = StringBuilder()
-        val emotion = loadEmotion()
+        val emotion = loadEmotionSync()
         sb.appendLine("# Agent 记忆备份")
         sb.appendLine()
         sb.appendLine("- 导出时间: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())}")
@@ -443,7 +449,7 @@ class MemoryManager(context: Context) {
             val backup = MemoryBackup(
                 version = 1,
                 exportedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
-                emotion = loadEmotion(),
+                emotion = loadEmotionSync(),
                 memories = mapOf(
                     MemoryType.L0_INSTANT.name to loadMemory(MemoryType.L0_INSTANT),
                     MemoryType.L1_DAILY.name to loadMemory(MemoryType.L1_DAILY),

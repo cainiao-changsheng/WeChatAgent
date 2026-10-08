@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,8 +29,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -171,6 +176,7 @@ fun ChatListScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChatListItem(chat: Chat, agentAvatar: String = "🤖", agentAvatarUri: String = "",
                  titleOverride: String? = null,
@@ -182,47 +188,76 @@ fun ChatListItem(chat: Chat, agentAvatar: String = "🤖", agentAvatarUri: Strin
     val timeStr = if (now - chat.lastTime > 24 * 60 * 60 * 1000)
         dateFormat.format(Date(chat.lastTime)) else timeFormat.format(Date(chat.lastTime))
 
-    Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    // 左滑露出红色「删除」区域，滑到底触发删除确认弹窗；item 保留后弹回
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) onLongClick()
+            false
+        }
+    )
+
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = true,
+        backgroundContent = {
             Box(
-                modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(WeChatGreen),
-                contentAlignment = Alignment.Center
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.error),
+                contentAlignment = Alignment.CenterEnd
             ) {
-                if (agentAvatarUri.isNotEmpty()) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(context).data(Uri.parse(agentAvatarUri)).crossfade(true).build(),
-                        contentDescription = "", modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
-                        contentScale = ContentScale.Crop)
-                } else {
-                    Text(agentAvatar, fontSize = MaterialTheme.typography.headlineMedium.fontSize)
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "删除", tint = Color.White)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("删除", color = Color.White, style = MaterialTheme.typography.bodyMedium)
                 }
-            }
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        titleOverride ?: chat.title,
-                        style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(timeStr, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(chat.lastMessage.ifEmpty { "暂无消息" }, style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 80.dp, end = 16.dp)
-                .height(0.5.dp)
-                .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
-        )
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier.size(52.dp).clip(RoundedCornerShape(8.dp)).background(WeChatGreen),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (agentAvatarUri.isNotEmpty()) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context).data(Uri.parse(agentAvatarUri)).crossfade(true).build(),
+                            contentDescription = "", modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop)
+                    } else {
+                        Text(agentAvatar, fontSize = MaterialTheme.typography.headlineMedium.fontSize)
+                    }
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            titleOverride ?: chat.title,
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Medium,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(timeStr, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f))
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(chat.lastMessage.ifEmpty { "暂无消息" }, style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 80.dp, end = 16.dp)
+                    .height(0.5.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+            )
+        }
     }
 }
