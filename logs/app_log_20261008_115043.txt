@@ -1,0 +1,68 @@
+[2026-10-08 02:01:56.879] [ChatVM] migrateLegacyChatsToGlobal 合并会话=0
+[2026-10-08 02:01:56.881] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-10-08 02:01:57.070] [ChatVM] switchAgent(agentId=default) 当前角色=default
+[2026-10-08 02:01:57.071] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-10-08 07:32:33.224] [ChatVM] switchAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=default
+[2026-10-08 07:32:33.227] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=default
+[2026-10-08 07:32:45.944] [ChatVM] openOrCreateChatWithAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 07:32:45.948] [ChatVM] openOrCreateChatWithAgent 新建会话 id=4da37efa-0bfb-4365-aa6a-f11ab755177b
+[2026-10-08 07:32:46.026] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 07:33:14.487] [ChatVM] sendMessage chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 07:34:14.825] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 07:34:14.889] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 07:34:35.052] [ChatVM] sendMessage chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:52:08.014] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-10-08 09:52:08.020] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=default
+[2026-10-08 09:52:08.157] [ChatVM] switchAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:52:08.157] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:52:28.277] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:52:28.440] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:52:46.681] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:52:46.785] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:52:55.967] [ChatVM] sendMessage chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:54:00.706] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:54:00.775] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:54:15.526] [ChatVM] sendMessage chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:55:24.793] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-10-08 09:55:24.798] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=default
+[2026-10-08 09:55:24.952] [ChatVM] switchAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:55:24.953] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:55:25.681] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 09:55:25.905] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:45:53.650] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-10-08 11:45:53.658] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=default
+[2026-10-08 11:45:53.828] [ChatVM] switchAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:45:53.829] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:16.671] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:18.242] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-10-08 11:46:18.247] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=default
+[2026-10-08 11:46:18.412] [ChatVM] switchAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:18.413] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:19.133] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:21.597] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-10-08 11:46:21.602] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=default
+[2026-10-08 11:46:21.761] [ChatVM] switchAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:21.761] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:22.416] [ChatVM] selectChat(chatId=4da37efa-0bfb-4365-aa6a-f11ab755177b) agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:23.903] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-10-08 11:46:23.908] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=default
+[2026-10-08 11:46:24.077] [ChatVM] switchAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:24.078] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:28.639] [ChatVM] openOrCreateChatWithAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:28.640] [ChatVM] openOrCreateChatWithAgent 复用会话 id=4da37efa-0bfb-4365-aa6a-f11ab755177b
+[2026-10-08 11:46:30.178] [ChatVM] bindAgent(agentId=default, apply=true) 旧角色=default
+[2026-10-08 11:46:30.183] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=default
+[2026-10-08 11:46:30.342] [ChatVM] switchAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:30.342] [ChatVM] bindAgent(agentId=cceb7662-3c37-47da-8307-cc6b1e04faa8, apply=true) 旧角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:35.797] [ChatVM] switchAgent(agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7) 当前角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:35.797] [ChatVM] bindAgent(agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7, apply=true) 旧角色=cceb7662-3c37-47da-8307-cc6b1e04faa8
+[2026-10-08 11:46:39.679] [ChatVM] openOrCreateChatWithAgent(agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7) 当前角色=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7
+[2026-10-08 11:46:39.683] [ChatVM] openOrCreateChatWithAgent 新建会话 id=9606ec6e-0bbc-420b-a1f8-9a4f7ed5317d
+[2026-10-08 11:46:39.756] [ChatVM] selectChat(chatId=9606ec6e-0bbc-420b-a1f8-9a4f7ed5317d) agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7 当前角色=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7
+[2026-10-08 11:47:18.923] [ChatVM] selectChat(chatId=9606ec6e-0bbc-420b-a1f8-9a4f7ed5317d) agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7 当前角色=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7
+[2026-10-08 11:47:18.987] [ChatVM] selectChat(chatId=9606ec6e-0bbc-420b-a1f8-9a4f7ed5317d) agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7 当前角色=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7
+[2026-10-08 11:47:37.425] [ChatVM] sendMessage chatId=9606ec6e-0bbc-420b-a1f8-9a4f7ed5317d agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7 当前角色=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7
+[2026-10-08 11:48:14.491] [ChatVM] selectChat(chatId=9606ec6e-0bbc-420b-a1f8-9a4f7ed5317d) agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7 当前角色=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7
+[2026-10-08 11:48:14.589] [ChatVM] selectChat(chatId=9606ec6e-0bbc-420b-a1f8-9a4f7ed5317d) agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7 当前角色=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7
+[2026-10-08 11:50:07.603] [ChatVM] selectChat(chatId=9606ec6e-0bbc-420b-a1f8-9a4f7ed5317d) agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7 当前角色=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7
+[2026-10-08 11:50:07.701] [ChatVM] selectChat(chatId=9606ec6e-0bbc-420b-a1f8-9a4f7ed5317d) agentId=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7 当前角色=3c548165-e0f7-45e9-8ce8-237c7e1ed1f7
