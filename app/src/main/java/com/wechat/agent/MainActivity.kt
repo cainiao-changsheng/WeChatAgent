@@ -356,8 +356,8 @@ fun AppNavigation() {
                 onBack = { navController.popBackStack() },
                 onEditProfile = { navController.navigate("editProfile") },
                 onOpenMoments = { navigateToTab(navController, "moments") },
-                onOpenSettings = { navController.navigate("settingsDetail") },
-                onOpenAdvanced = { navController.navigate("advanced") },
+                onOpenSettings = { navController.navigate("advanced") },
+                onOpenAdvanced = { navController.navigate("settingsDetail") },
                 onOpenDebug = { navController.navigate("debug") },
                 bottomBar = {
                     WeChatBottomBar(

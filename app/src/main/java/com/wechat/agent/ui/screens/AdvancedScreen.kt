@@ -63,7 +63,7 @@ private val RowBgPressed = Color(0xFF2A2E3A)
 private val SubText = Color(0xFF8A8FA3)
 
 /**
- * “我 → 高级”设置页，按参考图（2508.jpg）“思考设置”的排版与功能实现。
+ * “我 → 设置”设置页，按参考图（2508.jpg）“思考设置”的排版与功能实现。
  * 列表项：思考设置 / 流式输出 / 自定义请求参数 / 停用超时 / 添加自定义桌面图标 /
  * 深色模式 / 发送延时 / 多行文本自动分割；所有改动即时落库，无底部保存按钮。
  */
@@ -142,7 +142,7 @@ fun AdvancedScreen(
     Scaffold(
         topBar = {
             CenteredTopBar(
-                content = { Text("思考设置", fontWeight = FontWeight.Medium) },
+                content = { Text("设置", fontWeight = FontWeight.Medium) },
                 showBack = true,
                 onBack = onBack,
                 containerColor = Color(0xFF181A20)

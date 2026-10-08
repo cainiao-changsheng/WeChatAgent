@@ -60,7 +60,7 @@ fun SettingsScreen(
             TopAppBar(
                 title = {
                     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text("设置", fontWeight = FontWeight.Medium)
+                        Text("高级", fontWeight = FontWeight.Medium)
                     }
                 },
                 navigationIcon = {
