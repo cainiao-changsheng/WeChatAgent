@@ -1,6 +1,7 @@
 package com.wechat.agent.data
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -152,6 +153,7 @@ object PhoneControl {
         )
     }
 
+    @SuppressLint("MissingPermission")
     private fun postConfirmNotification(context: Context, requestId: String, description: String) {
         try {
             ensureChannel(context)
@@ -172,6 +174,7 @@ object PhoneControl {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private fun notifyResult(context: Context, text: String) {
         try {
             ensureChannel(context)
