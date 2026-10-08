@@ -7,8 +7,9 @@ import com.wechat.agent.data.network.ToolFunction
 /**
  * Agent 工具注册表：把应用能力暴露为 OpenAI 兼容的 function calling 工具。
  *
- * 阶段 1 仅提供只读工具（时间、屏幕使用时间、记忆查询），由模型按需调用；
- * 写操作工具（音乐/锁屏/发消息等）留待阶段 2，并需加用户确认机制。
+ * 只读工具（时间、屏幕使用时间、记忆查询、表情搜索）由模型按需调用；
+ * 写操作工具（发朋友圈动态）仅在用户主动开启热恋/Agent 能力时由模型自行决定，
+ * 且带本地冷却保护，避免刷屏与滥用。
  */
 data class AgentToolSpec(
     val name: String,
@@ -29,11 +30,14 @@ data class AgentToolSpec(
 
 object AgentToolRegistry {
 
-    /** 阶段 1 只读工具清单（不依赖用户手机端写权限，安全风险低）。 */
-    fun readOnlyTools(
+    /** Agent 工具清单（含只读工具与「发朋友圈动态」写工具，写工具带冷却保护）。 */
+    fun agentTools(
         memoryManager: MemoryManager,
         screenUsageProvider: suspend () -> String,
-        stickerSearchProvider: suspend (String) -> String
+        stickerSearchProvider: suspend (String) -> String,
+        stickerImageProvider: suspend (String) -> String?,
+        photosProvider: suspend () -> String,
+        postMomentProvider: suspend (String, String) -> String
     ): List<AgentToolSpec> = listOf(
         AgentToolSpec(
             name = "get_current_time",
@@ -111,6 +115,52 @@ object AgentToolRegistry {
                 } else {
                     "找到可用表情：$result"
                 }
+            }
+        ),
+        AgentToolSpec(
+            name = "browse_photos",
+            description = "查看对方最近分享过的相册照片，返回可用的照片路径列表。仅在确实想给动态配一张对方照片时才调用：先从返回结果里选一条路径，再把它填入 post_moment 的 imageUri。",
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to emptyMap<String, Any>(),
+                "required" to emptyList<String>()
+            ),
+            executor = { _ ->
+                val photos = photosProvider()
+                if (photos.isBlank()) {
+                    "暂时没有可用的相册照片，这次发纯文字动态即可。"
+                } else {
+                    "可用相册照片（把选中的路径原样填入 post_moment 的 imageUri）：\n$photos"
+                }
+            }
+        ),
+        AgentToolSpec(
+            name = "post_moment",
+            description = "发一条朋友圈动态，把你此刻想分享的生活或心情发布到动态里。仅在对方聊到相关话题、或你确实有想分享的事时才调用，不要频繁发（同一时间最多一条）。content 为动态正文，语气像真人朋友圈，1-3 句话，不要加前缀后缀。想配图时可二选一：stickerName 填收藏表情名，或 imageUri 填从 browse_photos 拿到的相册照片路径。",
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "content" to mapOf(
+                        "type" to "string",
+                        "description" to "朋友圈动态正文，1-3 句，语气自然像真人动态。"
+                    ),
+                    "stickerName" to mapOf(
+                        "type" to "string",
+                        "description" to "想配的收藏表情名称（可选）。必须是你确定存在的表情名（可用 search_sticker 查询），否则留空。"
+                    ),
+                    "imageUri" to mapOf(
+                        "type" to "string",
+                        "description" to "想配的用户相册照片路径（可选）。需先调用 browse_photos 获取可用路径，再从中选一条原样填入。"
+                    )
+                ),
+                "required" to listOf("content")
+            ),
+            executor = { args ->
+                val content = (args["content"] as? String)?.trim() ?: ""
+                val stickerName = (args["stickerName"] as? String)?.trim() ?: ""
+                val imageUri = (args["imageUri"] as? String)?.trim() ?: ""
+                val resolved = if (stickerName.isNotEmpty()) stickerImageProvider(stickerName) else null
+                postMomentProvider(content, resolved ?: imageUri)
             }
         )
     )

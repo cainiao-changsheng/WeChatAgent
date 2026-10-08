@@ -3,6 +3,7 @@ package com.wechat.agent.data.repository
 import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.MemoryManager
 import com.wechat.agent.data.SettingsManager
+import com.wechat.agent.data.model.SelfModelState
 import com.wechat.agent.agent.AgentToolSpec
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.network.ChatRequest
@@ -39,6 +40,12 @@ class ChatRepository(
     /** 灵魂文件 soul.md 内容（由 ViewModel 每轮实时读取注入，Agent 模式核心人设，优先级最高）。 */
     var soulPrompt: String = ""
 
+    /** M3 元认知调节文案（由 ViewModel 每轮注入，密度过高时收敛自指语言）。 */
+    var metacognitionGuidance: String = ""
+
+    /** M4 自我认知画像（由 ViewModel 每轮注入，保持回复与自我认知自洽）。 */
+    var selfModelPrompt: String = ""
+
     /** 记录不支持 function calling 的模型名，避免每次请求重复触发 400。 */
     private val toolsUnsupportedModels = java.util.Collections.synchronizedSet(java.util.HashSet<String>())
     /** Agent 执行最大轮数（含工具调用轮），防止死循环。 */
@@ -72,6 +79,14 @@ class ChatRepository(
             appendLine()
             if (personaPrompt.isNotBlank()) {
                 appendLine(personaPrompt)
+                appendLine()
+            }
+            if (selfModelPrompt.isNotBlank()) {
+                appendLine(selfModelPrompt)
+                appendLine()
+            }
+            if (metacognitionGuidance.isNotBlank()) {
+                appendLine(metacognitionGuidance)
                 appendLine()
             }
             if (formatRule.isNotEmpty()) {
@@ -633,25 +648,40 @@ class ChatRepository(
             ?: "网络请求失败，请稍后再试。"
     }
 
-    suspend fun backgroundReflection(
+    /**
+     * M4 自我状态建模反思：依据最新一轮对话，让 LLM 更新"自我画像"并输出预测误差修正。
+     * 返回更新后的自我模型；请求失败或解析失败时返回 null（不抛异常，保持后台静默）。
+     */
+    suspend fun selfModelReflection(
         model: String,
         apiKey: String,
         lastUserMessage: String,
-        lastAgentReply: String
-    ): String? = kotlinx.coroutines.withContext(Dispatchers.IO) {
+        lastAgentReply: String,
+        current: SelfModelState
+    ): SelfModelState? = kotlinx.coroutines.withContext(Dispatchers.IO) {
         try {
             val prompt = buildString {
                 appendLine(memoryManager.getIdentityPrompt())
                 appendLine()
-                appendLine("【后台自主复盘 - 不展示给用户】")
-                appendLine("你刚和对方完成了以下对话：")
-                appendLine("对方说: $lastUserMessage")
-                appendLine("你回复: $lastAgentReply")
+                appendLine("【自我状态建模 - 纯后台，不对用户展示】")
+                appendLine("你目前对自己的认知画像：")
+                appendLine("- 我是谁：${current.selfSummary.ifBlank { "（尚未建立）" }}")
+                appendLine("- 与对方关系阶段：${current.relationshipStage.ifBlank { "（未知）" }}")
+                appendLine("- 近期情绪基调：${current.emotionalBaseline.ifBlank { "（未知）" }}")
                 appendLine()
-                appendLine("请用1-2句话思考并回答（纯内部思考，不对用户展示）：")
-                appendLine("1. 你刚才的回复有没有话太生硬、太冷淡、或哪里可以更温柔？")
-                appendLine("2. 对方现在的情绪状态大概是什么？需不需要你下次更关心TA？")
-                appendLine("3. 下次可以主动聊什么话题？")
+                appendLine("最近一轮对话：")
+                appendLine("对方说：$lastUserMessage")
+                appendLine("你回复：$lastAgentReply")
+                appendLine()
+                appendLine("请据此做一次自我认知更新，只输出一个 JSON 对象，不要输出任何 JSON 之外的内容，字段如下：")
+                appendLine("{")
+                appendLine("  \"selfSummary\": \"更新后的『我是谁』一句话画像（保留原画像并只做微调）\",")
+                appendLine("  \"relationshipStage\": \"当前与对方关系阶段（一句话）\",")
+                appendLine("  \"emotionalBaseline\": \"近期情绪基调（一句话）\",")
+                appendLine("  \"prediction\": \"你对接下来关系/情绪走向的预测（一句话）\",")
+                appendLine("  \"error\": \"这轮实际对话与你的画像/预测的偏差（一句话）\",")
+                appendLine("  \"correction\": \"据此对自我认知的修正（一句话，可写入长期记忆）\"")
+                appendLine("}")
             }
             val messages = listOf(ChatMessage(role = "user", content = prompt))
             val request = buildRequestBody(ChatRequest(model = model, messages = messages, stream = false))
@@ -659,11 +689,31 @@ class ChatRepository(
                 authorization = "Bearer $apiKey",
                 request = request
             )
-            if (response.isSuccessful) {
-                response.body()?.choices?.firstOrNull()?.message?.content
-            } else null
+            if (!response.isSuccessful) return@withContext null
+            val raw = response.body()?.choices?.firstOrNull()?.message?.content
+                ?.trim() ?: return@withContext null
+            parseSelfModel(raw, current)
         } catch (_: Exception) { null }
     }
 
-
+    /** 解析 LLM 返回的自画像 JSON；解析失败时把整段文本当作一条自我修正兜底。 */
+    private fun parseSelfModel(raw: String, current: SelfModelState): SelfModelState {
+        return try {
+            val json = raw.substringAfter("{").substringBeforeLast("}")
+            val obj = gson.fromJson("{$json}", com.google.gson.JsonObject::class.java)
+            fun str(name: String, fallback: String): String =
+                obj?.get(name)?.takeIf { !it.isJsonNull }?.asString?.trim()?.takeIf { it.isNotEmpty() } ?: fallback
+            current.copy(
+                selfSummary = str("selfSummary", current.selfSummary),
+                relationshipStage = str("relationshipStage", current.relationshipStage),
+                emotionalBaseline = str("emotionalBaseline", current.emotionalBaseline),
+                lastPrediction = str("prediction", ""),
+                lastError = str("error", ""),
+                lastCorrection = str("correction", ""),
+                lastUpdatedAt = System.currentTimeMillis()
+            )
+        } catch (_: Exception) {
+            current.copy(lastCorrection = raw.trim().take(200), lastUpdatedAt = System.currentTimeMillis())
+        }
+    }
 }

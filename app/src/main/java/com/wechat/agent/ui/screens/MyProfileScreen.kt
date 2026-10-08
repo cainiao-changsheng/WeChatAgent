@@ -127,14 +127,14 @@ fun MyProfileScreen(
                 onClick = onOpenMoments
             )
             ProfileMenuRow(
-                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "设置", tint = Color(0xFF7C4DFF)) },
-                title = "设置",
-                onClick = onOpenSettings
-            )
-            ProfileMenuRow(
-                icon = { Icon(Icons.Default.Settings, contentDescription = "高级", tint = Color(0xFF576B95)) },
+                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "高级", tint = Color(0xFF7C4DFF)) },
                 title = "高级",
                 onClick = onOpenAdvanced
+            )
+            ProfileMenuRow(
+                icon = { Icon(Icons.Default.Settings, contentDescription = "设置", tint = Color(0xFF576B95)) },
+                title = "设置",
+                onClick = onOpenSettings
             )
             ProfileMenuRow(
                 icon = { Icon(Icons.Default.Build, contentDescription = "调试", tint = Color(0xFF546E7A)) },

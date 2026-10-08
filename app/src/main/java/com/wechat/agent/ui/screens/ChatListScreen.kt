@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -188,7 +188,7 @@ fun ChatListItem(chat: Chat, agentAvatar: String = "🤖", agentAvatarUri: Strin
     val timeStr = if (now - chat.lastTime > 24 * 60 * 60 * 1000)
         dateFormat.format(Date(chat.lastTime)) else timeFormat.format(Date(chat.lastTime))
 
-    // 左滑露出红色「删除」区域，滑到底触发删除确认弹窗；item 保留后弹回
+    // 左滑露出 QQ 风格红色「删除」按钮（右侧独立色块），滑到底触发删除确认弹窗；item 保留后弹回
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) onLongClick()
@@ -202,16 +202,22 @@ fun ChatListItem(chat: Chat, agentAvatar: String = "🤖", agentAvatarUri: Strin
         enableDismissFromEndToStart = true,
         backgroundContent = {
             Box(
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.CenterEnd
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(76.dp)
+                        .background(Color(0xFFFF4444)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Delete, contentDescription = "删除", tint = Color.White)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("删除", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "删除",
+                        color = Color.White,
+                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
         }

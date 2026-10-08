@@ -6,6 +6,7 @@ import com.wechat.agent.data.model.EmotionState
 import com.wechat.agent.data.model.MemoryEntry
 import com.wechat.agent.data.model.MemoryType
 import com.wechat.agent.data.model.Mood
+import com.wechat.agent.data.model.SelfModelState
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlin.math.exp
@@ -229,6 +230,23 @@ class MemoryManager(context: Context) {
     fun loadEmotionSync(): EmotionState {
         val json = prefs.getString("emotion_state", null) ?: return EmotionState()
         return try { gson.fromJson(json, EmotionState::class.java) } catch (_: Exception) { EmotionState() }
+    }
+
+    // ========== 自我状态建模（M4 SelfModel） ==========
+
+    fun loadSelfModelSync(): SelfModelState {
+        val json = prefs.getString("self_model_state", null) ?: return SelfModelState()
+        return try { gson.fromJson(json, SelfModelState::class.java) } catch (_: Exception) { SelfModelState() }
+    }
+
+    suspend fun loadSelfModel(): SelfModelState = mutex.withLock { loadSelfModelSync() }
+
+    fun saveSelfModelSync(state: SelfModelState) {
+        prefs.edit().putString("self_model_state", gson.toJson(state)).apply()
+    }
+
+    suspend fun saveSelfModel(state: SelfModelState) = mutex.withLock {
+        saveSelfModelSync(state)
     }
 
     // ========== 记忆导入 / 导出 ==========

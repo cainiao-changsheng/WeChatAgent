@@ -6,12 +6,10 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.Contacts
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -33,7 +31,6 @@ private val DefaultTabs = listOf(
     WeChatTab("chatList", "聊天"),
     WeChatTab("contacts", "通讯录"),
     WeChatTab("moments", "动态"),
-    WeChatTab("discover", "发现"),
     WeChatTab("settings", "我")
 )
 
@@ -82,7 +79,6 @@ private fun iconFor(route: String, selected: Boolean): ImageVector = when (route
     "chatList" -> if (selected) Icons.Filled.Chat else Icons.Outlined.Chat
     "contacts" -> if (selected) Icons.Filled.Contacts else Icons.Outlined.Contacts
     "moments" -> if (selected) Icons.Filled.Explore else Icons.Outlined.Explore
-    "discover" -> if (selected) Icons.Filled.Public else Icons.Outlined.Public
     "settings" -> if (selected) Icons.Filled.Person else Icons.Outlined.Person
     else -> if (selected) Icons.Filled.Chat else Icons.Outlined.Chat
 }

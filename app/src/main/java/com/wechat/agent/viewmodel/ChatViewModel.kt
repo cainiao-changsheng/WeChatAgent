@@ -15,6 +15,8 @@ import com.wechat.agent.data.EmotionEngine
 import com.wechat.agent.data.ImageCacheHelper
 import com.wechat.agent.data.LifeSimulator
 import com.wechat.agent.data.MemoryManager
+import com.wechat.agent.data.MessageNotifier
+import com.wechat.agent.data.MetacognitionTracker
 import com.wechat.agent.data.MomentsGenerator
 import com.wechat.agent.data.LifeDecisionEngine
 import com.wechat.agent.data.MusicController
@@ -40,6 +42,7 @@ import com.wechat.agent.data.repository.ChatRepository.AgentStreamPiece
 import com.wechat.agent.data.repository.ChatRepository.StreamPiece
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.io.File
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
@@ -74,6 +77,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val emojiManager = EmojiManager(application)
     private val observationStore = ObservationStore(application)
     private val soulManager = SoulManager.get(application)
+    private val metacognitionTracker = MetacognitionTracker(application)
     private val gson = Gson()
 
     // 各角色独立的数据文件（默认角色使用旧文件兼容历史数据）
@@ -483,12 +487,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 appendLine("【约束条件与人物一致性审查】")
                 appendLine("${profile.customPrompt}")
             }
-            val stickerCount = emojiManager.getAllStickers().size
-            if (stickerCount > 0) {
+            val stickers = emojiManager.getAllStickers()
+            if (stickers.isNotEmpty()) {
+                val nameList = stickers.take(30).joinToString("、") { s ->
+                    s.name + (if (s.shortcut.isNotEmpty()) "（快捷名 ${s.shortcut}）" else "")
+                }
                 appendLine()
                 appendLine("【可用表情 - 对方自定义的图片表情】")
-                appendLine("聊天时你可以使用对方自定义的图片表情（共 $stickerCount 个）让回复更生动。需要表情时，调用 search_sticker 工具，按你想要的语义关键词（如 开心、生气、点赞、晚安 等）精确搜索，工具会返回可用的表情名；")
-                appendLine("然后在回复中用 [表情名] 或 表情:表情名 的格式输出（例如 [开心]），聊天界面会自动替换为对应图片。严禁编造工具未返回的表情名，搜索无结果就自然回复不加表情。")
+                appendLine("以下是对方已收藏的图片表情，回复时可以直接使用，无需调用任何工具：")
+                appendLine(nameList)
+                appendLine("想配表情时，从上面列表里选一个，用 [表情名] 或 表情:表情名 的格式嵌在回复里（例如 [开心]），聊天界面会自动替换成对应图片。只能使用上面列出的表情名，不要编造不存在的名字；不合适就不加表情，自然回复。")
             }
             appendLine("你们已经认识并且有共同记忆，严格遵循以上设定来扮演这位好友，不要说破自己是 AI。")
             // 热恋模式：向模型注入热恋设定与已获得的能力
@@ -624,6 +632,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     content = "主动联系对方: $reason → 我说: $content",
                     emotion = state.mood.label, importance = 3
                 ))
+
+                // 后台主动消息：通过通知栏提醒用户（点击回到应用），避免用户无感知
+                MessageNotifier.notifyProactiveMessage(
+                    getApplication(),
+                    settingsManager.agentName.first(),
+                    content
+                )
             } catch (_: Exception) {}
         }
     }
@@ -870,6 +885,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val chatAgentId = _chats.value.find { it.id == chatId }?.agentId
                 repository.personaPrompt = buildPersonaPrompt(chatAgentId)
                 repository.soulPrompt = soulManager.readSoul(chatAgentId.orEmpty())
+                repository.selfModelPrompt = memoryManager.loadSelfModel().toPrompt()
+                repository.metacognitionGuidance = metacognitionTracker.guidance()
                 val chatMessages = repository.buildChatMessages(model, _currentMessages.value, emotionDesc, moodDesc)
 
                 val advanced = settingsManager.getAdvancedSettingsSync()
@@ -891,7 +908,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         model = model,
                         apiKey = apiKey,
                         chatMessages = chatMessages,
-                        tools = AgentToolRegistry.readOnlyTools(
+                        tools = AgentToolRegistry.agentTools(
                             memoryManager = memoryManager,
                             screenUsageProvider = { buildScreenUsageSummary() },
                             stickerSearchProvider = { keywords ->
@@ -899,7 +916,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                     .joinToString("、") { s ->
                                         s.name + if (s.shortcut.isNotEmpty()) "（快捷名 ${s.shortcut}）" else ""
                                     }
-                            }
+                            },
+                            stickerImageProvider = { name -> emojiManager.findSticker(name)?.imagePath },
+                            photosProvider = {
+                                listRecentSharedPhotos(6)
+                                    .mapIndexed { i, p -> "照片${i + 1}: $p" }
+                                    .joinToString("\n")
+                            },
+                            postMomentProvider = { content, imageUri -> agentPostMoment(content, imageUri) }
                         )
                     )
                     val agentCollect: suspend (AgentStreamPiece) -> Unit = { piece ->
@@ -968,13 +992,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                     viewModelScope.launch {
                         try {
-                            val reflection = repository.backgroundReflection(model, apiKey, content, fullReply)
-                            if (!reflection.isNullOrBlank()) {
-                                memoryManager.addMemory(MemoryEntry(
-                                    id = UUID.randomUUID().toString(), type = MemoryType.L1_DAILY,
-                                    content = "自我复盘: ${reflection.take(120)}",
-                                    emotion = _emotionState.value.mood.label, importance = 3
-                                ))
+                            // M3：记录本条回复的自指密度，并按节流规则决定是否触发一次显式自我复盘
+                            metacognitionTracker.record(fullReply)
+                            if (metacognitionTracker.shouldTriggerReflection()) {
+                                metacognitionTracker.markReflected()
+                                // M4：更新"自我画像"（预测 → 误差 → 修正），并写入 L2 成长记忆
+                                val updatedSelf = repository.selfModelReflection(
+                                    model, apiKey, content, fullReply, memoryManager.loadSelfModel()
+                                )
+                                if (updatedSelf != null) {
+                                    memoryManager.saveSelfModel(updatedSelf)
+                                    if (updatedSelf.lastCorrection.isNotBlank()) {
+                                        memoryManager.addGrowthMemory(
+                                            "自我修正: ${updatedSelf.lastCorrection.take(120)}",
+                                            _emotionState.value.mood.label, importance = 5
+                                        )
+                                    }
+                                }
                             }
                         } catch (_: Exception) {}
                     }
@@ -1243,7 +1277,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun searchAndPlaySong(query: String) { try { musicController.searchSong(query) } catch (_: Exception) {} }
     fun toggleLike(postId: String) {
         _momentsPosts.value = _momentsPosts.value.map {
-            if (it.id == postId) it.copy(liked = !it.liked) else it
+            if (it.id == postId) it.copy(
+                liked = !it.liked,
+                likeCount = (it.likeCount + if (!it.liked) 1 else -1).coerceAtLeast(0)
+            ) else it
         }
         saveMomentsToStorage()
     }
@@ -1309,10 +1346,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 // 轮数越深，AI 越可能停止回复，模拟"直到一方停止"
                 val depthFactor = 100 - (aiReplyCount * 18)
                 val willReply = when {
-                    state.affinity >= 70 -> rand < (85 * depthFactor / 100)
-                    state.affinity >= 45 -> rand < (60 * depthFactor / 100)
-                    state.affinity >= 25 -> rand < (35 * depthFactor / 100)
-                    else -> rand < (15 * depthFactor / 100)
+                    state.affinity >= 70 -> rand < (95 * depthFactor / 100)
+                    state.affinity >= 45 -> rand < (85 * depthFactor / 100)
+                    state.affinity >= 25 -> rand < (70 * depthFactor / 100)
+                    else -> rand < (45 * depthFactor / 100)
                 }
                 if (!willReply) return@launch
 
@@ -1395,17 +1432,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 when {
                     state.affinity >= 70 -> {
                         aiLiked = true
-                        if (rand < 75) comment = generateReactionComment(state, post, agentName)
+                        if (rand < 90) comment = generateReactionComment(state, post, agentName)
                     }
                     state.affinity >= 45 -> {
-                        if (rand < 55) aiLiked = true
-                        if (rand < 40) comment = generateReactionComment(state, post, agentName)
+                        aiLiked = true
+                        if (rand < 65) comment = generateReactionComment(state, post, agentName)
                     }
                     state.affinity >= 25 -> {
-                        if (rand < 30) aiLiked = true
+                        aiLiked = true
+                        if (rand < 35) comment = generateReactionComment(state, post, agentName)
                     }
                     else -> {
-                        if (rand < 10) comment = "（已读）"
+                        if (rand < 50) aiLiked = true
+                        if (rand < 25) comment = "（已读）"
                     }
                 }
 
@@ -1540,6 +1579,61 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Agent 工具：发布一条朋友圈动态（由大模型在聊天中主动决定），带冷却保护避免刷屏，可附带图片（收藏表情/相册照片）。 */
+    private suspend fun agentPostMoment(content: String, imageUri: String = ""): String {
+        val trimmed = content.trim()
+        if (trimmed.isEmpty() && imageUri.isEmpty()) return "动态内容为空，未发布。"
+        val now = System.currentTimeMillis()
+        val lastAutoTime = momentsPrefs.getLong("last_auto_moments", 0)
+        if (now - lastAutoTime < 30 * 60 * 1000L) {
+            return "最近刚发布过动态（不足 30 分钟），暂不重复发布，这次用文字回复即可。"
+        }
+        val authorName = settingsManager.agentName.first()
+        val state = _emotionState.value
+        // 图片（收藏表情或相册照片）统一缓存到内部存储，退出应用后仍可读取
+        val cachedImage = if (imageUri.isNotEmpty()) {
+            ImageCacheHelper.cacheToInternal(getApplication(), imageUri) ?: imageUri
+        } else ""
+        val post = MomentPost(
+            id = UUID.randomUUID().toString(),
+            content = trimmed,
+            mood = state.mood.label,
+            timestamp = now,
+            likeCount = 0,
+            commentCount = 0,
+            liked = false,
+            timeCategory = momentsGenerator.getTimeCategory(),
+            author = authorName,
+            comments = emptyList(),
+            aiLiked = false,
+            aiReacted = false,
+            imageUri = cachedImage
+        )
+        val current = _momentsPosts.value.toMutableList()
+        current.add(post)
+        if (current.size > 50) current.removeAt(0)
+        _momentsPosts.value = current
+        saveMomentsToStorage()
+        momentsPrefs.edit().putLong("last_auto_moments", now).apply()
+        return "已发布朋友圈动态：${trimmed.take(40)}"
+    }
+
+    /** 列出用户最近通过聊天分享过的照片（已缓存在内部存储 chat_images），按时间倒序，供 Agent 配图使用。 */
+    private fun listRecentSharedPhotos(limit: Int): List<String> {
+        return try {
+            val dir = File(getApplication<Application>().filesDir, "chat_images")
+            if (!dir.exists()) return emptyList()
+            dir.listFiles()
+                ?.filter { it.isFile && it.extension.lowercase() in setOf("jpg", "jpeg", "png", "webp", "gif") }
+                ?.sortedByDescending { it.lastModified() }
+                ?.take(limit)
+                ?.map { it.absolutePath }
+                ?: emptyList()
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     private fun syncChatInList(chatId: String, lastMsg: String, messages: List<Message>) {
         val idx = _chats.value.indexOfFirst { it.id == chatId }
         if (idx >= 0) {
@@ -1553,8 +1647,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         saveChatsToStorage()
     }
 
-    /** 清洗模型正文：去掉星号/方括号/圆括号包裹的动作与状态描写，保留纯对话文本。 */
+    /** 清洗模型正文：去掉工具调用标记（如 <||DSML|| …>）、星号/方括号/圆括号包裹的动作与状态描写，保留纯对话文本。 */
     private fun cleanReply(raw: String): String = raw
+        .replace(Regex("""<\|[^>]*>"""), "")
+        .replace(Regex("""(?m)^\s*<\|.*$"""), "")
         .replace(Regex("""\*[^*]+\*"""), "")
         .replace(Regex("""【[^】]+】"""), "")
         .replace(Regex("""（[^）]+）"""), "")
@@ -1641,6 +1737,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val chatAgentId = _chats.value.find { it.id == chatId }?.agentId
                 repository.personaPrompt = buildPersonaPrompt(chatAgentId)
                 repository.soulPrompt = soulManager.readSoul(chatAgentId.orEmpty())
+                repository.selfModelPrompt = memoryManager.loadSelfModel().toPrompt()
+                repository.metacognitionGuidance = metacognitionTracker.guidance()
                 val imageDataUrl = readImageAsBase64(cachedUri)
                 val replyFlow = if (imageDataUrl != null) {
                     repository.sendVisionMessageStream(
