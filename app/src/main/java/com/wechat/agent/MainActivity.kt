@@ -39,6 +39,7 @@ import com.wechat.agent.ui.screens.LogScreen
 import com.wechat.agent.ui.screens.ModelConfigScreen
 import com.wechat.agent.ui.screens.MomentsScreen
 import com.wechat.agent.ui.screens.MyProfileScreen
+import com.wechat.agent.ui.screens.SoulEditorScreen
 import com.wechat.agent.ui.screens.SpeechSettingsScreen
 import com.wechat.agent.ui.screens.SettingsScreen
 import com.wechat.agent.ui.screens.UpdateCheckScreen
@@ -237,7 +238,21 @@ fun AppNavigation() {
                     chatViewModel.deleteChatsByAgent(profile.id)
                     settingsViewModel.deleteAgentProfile(profile.id)
                     navController.popBackStack()
-                }
+                },
+                onEditSoul = { navController.navigate("soulEditor/$agentId") }
+            )
+        }
+
+        composable(
+            route = "soulEditor/{agentId}",
+            arguments = listOf(navArgument("agentId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val agentId = backStackEntry.arguments?.getString("agentId") ?: return@composable
+            val profile = agentProfiles.find { it.id == agentId }
+            SoulEditorScreen(
+                agentId = agentId,
+                agentName = profile?.name ?: "AI 好友",
+                onBack = { navController.popBackStack() }
             )
         }
 
@@ -280,7 +295,11 @@ fun AppNavigation() {
                     val aid = chat?.agentId
                     if (!aid.isNullOrBlank()) navController.navigate("agentDetail/$aid")
                 },
-                onTypingChange = { chatViewModel.setUserTyping(it) }
+                onTypingChange = { chatViewModel.setUserTyping(it) },
+                onUpdateMessageAudio = { id, uri, durationMs ->
+                    chatViewModel.updateMessageAudio(id, uri, durationMs)
+                },
+                onMessageToText = { chatViewModel.setMessageVoiceToText(it, true) }
             )
         }
 

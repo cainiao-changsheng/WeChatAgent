@@ -1,6 +1,9 @@
 package com.wechat.agent.ui.screens
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Handler
@@ -15,9 +18,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,6 +88,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.core.content.ContextCompat
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -116,6 +123,7 @@ import com.wechat.agent.ui.theme.DarkSelfBubble
 import com.wechat.agent.ui.theme.OtherBubble
 import com.wechat.agent.ui.theme.SelfBubble
 import com.wechat.agent.ui.theme.WeChatGreen
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -145,7 +153,9 @@ fun ChatScreen(
     onSkipPrev: () -> Unit = {},
     onOpenMusicApp: () -> Unit = {},
     onAvatarClick: () -> Unit = {},
-    onTypingChange: (Boolean) -> Unit = {}
+    onTypingChange: (Boolean) -> Unit = {},
+    onUpdateMessageAudio: (String, String, Int) -> Unit = { _, _, _ -> },
+    onMessageToText: (String) -> Unit = {}
 ) {
     var inputText by remember { mutableStateOf("") }
     var showEmojiPanel by remember { mutableStateOf(false) }
@@ -154,11 +164,32 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     val isDark = MaterialTheme.colorScheme.background == Color(0xFF191919)
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val settingsManager = remember { SettingsManager.getInstance(context.applicationContext) }
     val advSettings by settingsManager.advancedSettings.collectAsState()
     val speech = remember { SpeechManager.get(context.applicationContext) }
     val speechState by speech.state.collectAsState()
     LaunchedEffect(Unit) { speech.refresh() }
+    // 语音播放：模型/文字气泡点击后，即时合成 + 缓存并朗读（用户文字气泡只朗读、不落库）
+    val handlePlayVoice: (Message, String) -> Unit = { msg, text ->
+        if (msg.audioUri.isNotEmpty()) {
+            speech.playVoiceMessage(msg.audioUri)
+        } else if (msg.role == Role.AGENT) {
+            scope.launch {
+                val result = speech.synthesizeToCache(text)
+                if (result != null) {
+                    onUpdateMessageAudio(msg.id, result.first, result.second)
+                    speech.playVoiceMessage(result.first)
+                }
+            }
+        } else {
+            speech.speak(text)
+        }
+    }
+    // 引用：把被引用文本以「原文」形式填入输入框，方便基于原话继续回复
+    val handleQuote: (String) -> Unit = { quoted ->
+        inputText = "「$quoted」"
+    }
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* 授权结果在下一次点击时再判断 */ }
@@ -193,19 +224,26 @@ fun ChatScreen(
     val emojiManager = remember { EmojiManager(context) }
     var stickers by remember { mutableStateOf(emojiManager.getAllStickers()) }
     var showAddStickerDialog by remember { mutableStateOf(false) }
-    // 语音回复：AI 消息生成完成后自动朗读（需开启语音回复且模型就绪）
-    var spokenMessageId by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(messages, streamingContent, isLoading) {
-        val last = messages.lastOrNull()
-        if (last != null && last.role == Role.AGENT && last.id != spokenMessageId &&
-            streamingContent.isBlank() && !isLoading && advSettings.voiceReply && speechState.ttsReady
-        ) {
-            val text = last.content.trim()
-            if (text.isNotBlank() && last.imageUri.isBlank()) {
-                spokenMessageId = last.id
-                speech.speak(text)
-            }
+    // 语音回复：AI 消息生成完成后自动朗读（需开启语音回复且模型就绪）。
+    // 一次回复可能被分割成多条，全部按序拼接后连读，避免只读最后一条。
+    var spokenMessageIds by remember { mutableStateOf(setOf<String>()) }
+    var voiceInitialized by remember { mutableStateOf(false) }
+    LaunchedEffect(messages, streamingContent, isLoading, speechState.ttsReady) {
+        if (streamingContent.isNotBlank() || isLoading || !advSettings.voiceReply || !speechState.ttsReady) return@LaunchedEffect
+        val agentMessages = messages.filter { it.role == Role.AGENT }
+        if (!voiceInitialized) {
+            // 首次进入：仅登记已有消息，避免朗读刚加载的历史记录
+            spokenMessageIds = agentMessages.map { it.id }.toSet()
+            voiceInitialized = true
+            return@LaunchedEffect
         }
+        val pending = agentMessages.filter {
+            it.id !in spokenMessageIds && it.content.isNotBlank() && it.imageUri.isBlank()
+        }
+        if (pending.isEmpty()) return@LaunchedEffect
+        spokenMessageIds = spokenMessageIds + pending.map { it.id }.toSet()
+        val text = pending.joinToString("\n") { it.content.trim() }
+        if (text.isNotBlank()) speech.speak(text)
     }
     DisposableEffect(Unit) {
         onDispose {
@@ -440,7 +478,10 @@ fun ChatScreen(
                 MessageBubble(message = message, isDark = isDark,
                     agentAvatar = agentAvatar, userAvatar = userAvatar,
                     agentAvatarUri = agentAvatarUri, userAvatarUri = userAvatarUri,
-                    autoCollapseThinking = advSettings.autoCollapseThinking)
+                    autoCollapseThinking = advSettings.autoCollapseThinking,
+                    onPlayVoice = handlePlayVoice,
+                    onToText = { onMessageToText(it.id) },
+                    onQuote = handleQuote)
             }
             if (advSettings.thinkDisplay && streamingReasoning.isNotEmpty()) {
                 item {
@@ -568,6 +609,7 @@ private fun ThinkingBubble(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageBubble(
     message: Message,
@@ -576,7 +618,10 @@ fun MessageBubble(
     userAvatar: String = "👤",
     agentAvatarUri: String = "",
     userAvatarUri: String = "",
-    autoCollapseThinking: Boolean = false
+    autoCollapseThinking: Boolean = false,
+    onPlayVoice: (Message, String) -> Unit = { _, _ -> },
+    onToText: (Message) -> Unit = {},
+    onQuote: (String) -> Unit = {}
 ) {
     val isUser = message.role == Role.USER
     val bubbleColor = when {
@@ -592,6 +637,20 @@ fun MessageBubble(
     val stickerList = remember { stickerManager.getAllStickers() }
     val parsed = if (isUser) null else remember(message.content, stickerList) {
         parseStickerContent(message.content, stickerList)
+    }
+    val displayText = if (isUser) message.content else (parsed?.text ?: message.content)
+    // 模型回复默认展示为语音气泡（点击 TTS 朗读，长按可转文字）；错误/图片/流式消息仍按文本/图片展示
+    val showAgentVoice = !isUser && !message.voiceToText &&
+        message.imageUri.isBlank() && parsed?.images.isNullOrEmpty() &&
+        message.status == MessageStatus.SENT && displayText.isNotBlank()
+    val estimatedMs = ((displayText.length * 1000L) / 4).coerceAtLeast(800).toInt()
+    val voiceDurationMs = if (message.audioDurationMs > 0) message.audioDurationMs else estimatedMs
+    var showMenu by remember { mutableStateOf(false) }
+    var showSelect by remember { mutableStateOf(false) }
+    fun copyText() {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("消息", displayText))
+        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
     }
     // 记录正文气泡实际宽度（像素），用于思考气泡水平中点与正文气泡中点对齐
     var bodyWidthPx by remember { mutableStateOf(0) }
@@ -666,28 +725,41 @@ fun MessageBubble(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                 }
-                if (message.audioUri.isNotEmpty()) {
-                    VoiceMessageBubble(
-                        audioUri = message.audioUri,
-                        durationMs = message.audioDurationMs,
-                        bubbleColor = bubbleColor,
-                        isDark = isDark
-                    )
-                } else if ((if (isUser) message.content else parsed?.text ?: message.content).isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .onGloballyPositioned { coordinates ->
-                                if (coordinates.size.width > 0) bodyWidthPx = coordinates.size.width
-                            }
-                            .clip(RoundedCornerShape(
-                            topStart = if (isUser) 16.dp else 4.dp, topEnd = if (isUser) 4.dp else 16.dp,
-                            bottomStart = 16.dp, bottomEnd = 16.dp))
-                            .background(bubbleColor).padding(horizontal = 12.dp, vertical = 8.dp)
-                    ) {
-                        Text(
-                            if (isUser) message.content else parsed?.text ?: message.content,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (isUser && !isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface)
+                when {
+                    showAgentVoice -> {
+                        AgentVoiceBubble(
+                            durationMs = voiceDurationMs,
+                            bubbleColor = bubbleColor,
+                            isDark = isDark,
+                            onClick = { onPlayVoice(message, displayText) },
+                            onLongPress = { showMenu = true }
+                        )
+                    }
+                    message.audioUri.isNotEmpty() -> {
+                        VoiceMessageBubble(
+                            audioUri = message.audioUri,
+                            durationMs = message.audioDurationMs,
+                            bubbleColor = bubbleColor,
+                            isDark = isDark
+                        )
+                    }
+                    displayText.isNotEmpty() -> {
+                        Box(
+                            modifier = Modifier
+                                .onGloballyPositioned { coordinates ->
+                                    if (coordinates.size.width > 0) bodyWidthPx = coordinates.size.width
+                                }
+                                .combinedClickable(onClick = {}, onLongClick = { showMenu = true })
+                                .clip(RoundedCornerShape(
+                                topStart = if (isUser) 16.dp else 4.dp, topEnd = if (isUser) 4.dp else 16.dp,
+                                bottomStart = 16.dp, bottomEnd = 16.dp))
+                                .background(bubbleColor).padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                displayText,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (isUser && !isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface)
+                        }
                     }
                 }
                 Spacer(modifier = Modifier.height(2.dp))
@@ -719,6 +791,86 @@ fun MessageBubble(
             }
             }
         }
+    }
+
+    // 长按气泡弹出的操作菜单：语音气泡 → 转文字/引用；文字气泡 → 复制/选择/播放语音/引用
+    if (showMenu) {
+        AlertDialog(
+            onDismissRequest = { showMenu = false },
+            title = { Text("消息操作") },
+            text = {
+                Column {
+                    if (showAgentVoice) {
+                        BubbleMenuRow("转文字") { onToText(message); showMenu = false }
+                        BubbleMenuRow("引用") { onQuote(displayText); showMenu = false }
+                    } else {
+                        BubbleMenuRow("复制") { copyText(); showMenu = false }
+                        BubbleMenuRow("选择") { showMenu = false; showSelect = true }
+                        BubbleMenuRow("播放语音") { onPlayVoice(message, displayText); showMenu = false }
+                        BubbleMenuRow("引用") { onQuote(displayText); showMenu = false }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { showMenu = false }) { Text("取消") } }
+        )
+    }
+    if (showSelect) {
+        AlertDialog(
+            onDismissRequest = { showSelect = false },
+            title = { Text("选择文本") },
+            text = {
+                SelectionContainer {
+                    Text(displayText, style = MaterialTheme.typography.bodyMedium)
+                }
+            },
+            confirmButton = { TextButton(onClick = { showSelect = false }) { Text("完成") } }
+        )
+    }
+}
+
+/** 长按菜单中的操作项。 */
+@Composable
+private fun BubbleMenuRow(label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+/** 模型回复的语音气泡：播放图标 + 秒数，点击 TTS 朗读，长按转文字。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AgentVoiceBubble(
+    durationMs: Int,
+    bubbleColor: Color,
+    isDark: Boolean,
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
+) {
+    val seconds = maxOf(1, (durationMs + 500) / 1000)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(bubbleColor)
+            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.PlayArrow,
+            contentDescription = "播放",
+            tint = if (!isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            "$seconds″",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (!isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 

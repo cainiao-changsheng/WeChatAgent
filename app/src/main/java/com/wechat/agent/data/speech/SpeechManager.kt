@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.RandomAccessFile
+import java.security.MessageDigest
 
 /**
  * 语音能力协调器（单例）：集中管理模型下载状态、ASR 录音识别、TTS 播放。
@@ -168,6 +170,43 @@ class SpeechManager private constructor(private val context: Context) {
         speakJob?.cancel()
         _state.value = _state.value.copy(speaking = false)
     }
+
+    /**
+     * 文本 TTS 即时合成 + 缓存：按文本内容生成 WAV 到缓存目录并返回 (文件路径, 时长毫秒)。
+     * 已缓存的直接复用，避免重复合成；模型未就绪返回 null。
+     */
+    suspend fun synthesizeToCache(text: String): Pair<String, Int>? = withContext(Dispatchers.IO) {
+        val t = text.trim()
+        if (t.isBlank()) return@withContext null
+        val engine = ttsEngine ?: run { refresh(); ttsEngine }
+        if (engine == null) {
+            _state.value = _state.value.copy(
+                lastError = if (_state.value.ttsReady) "TTS 引擎未初始化" else "TTS 模型未就绪，请先到设置下载"
+            )
+            return@withContext null
+        }
+        val cacheFile = ttsCacheFile(t)
+        if (cacheFile.exists()) {
+            return@withContext cacheFile.absolutePath to readWavDurationMs(cacheFile)
+        }
+        val durationMs = engine.synthesizeToWav(t, cacheFile) ?: return@withContext null
+        cacheFile.absolutePath to durationMs
+    }
+
+    private fun ttsCacheFile(text: String): File {
+        val digest = MessageDigest.getInstance("MD5").digest(text.toByteArray(Charsets.UTF_8))
+        val name = digest.joinToString("") { "%02x".format(it) }
+        val dir = File(context.cacheDir, "tts_cache").apply { mkdirs() }
+        return File(dir, "tts_$name.wav")
+    }
+
+    private fun readWavDurationMs(file: File): Int = runCatching {
+        RandomAccessFile(file, "r").use { raf ->
+            raf.seek(24); val sr = readIntLe(raf)
+            raf.seek(40); val dataSize = readIntLe(raf)
+            if (sr <= 0 || dataSize <= 0) 0 else dataSize / (sr * 2) * 1000
+        }
+    }.getOrDefault(0)
 
     /** 开始录制一条语音消息：录音写入 WAV，同时离线识别；松开后回调 (文件路径, 时长毫秒, 识别文本)。 */
     fun startVoiceRecording(onResult: (audioPath: String, durationMs: Int, transcript: String) -> Unit) {

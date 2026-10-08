@@ -36,6 +36,9 @@ class ChatRepository(
     /** 当前扮演好友的设定（由 ViewModel 在每次回复前注入，保证首次扮演先读设定与记忆）。 */
     var personaPrompt: String = ""
 
+    /** 灵魂文件 soul.md 内容（由 ViewModel 每轮实时读取注入，Agent 模式核心人设，优先级最高）。 */
+    var soulPrompt: String = ""
+
     /** 记录不支持 function calling 的模型名，避免每次请求重复触发 400。 */
     private val toolsUnsupportedModels = java.util.Collections.synchronizedSet(java.util.HashSet<String>())
     /** Agent 执行最大轮数（含工具调用轮），防止死循环。 */
@@ -56,6 +59,11 @@ class ChatRepository(
 
         val systemPrompt = buildString {
             appendLine(identity)
+            if (soulPrompt.isNotBlank()) {
+                appendLine()
+                appendLine("【灵魂设定 soul.md - 最高优先级人设】")
+                appendLine(soulPrompt)
+            }
             appendLine()
             appendLine("【回复原则 - 快速直接】")
             appendLine("1. 看到对方消息后直接给出自然回复，不要长篇分析、不要内心独白、不要反复推敲。")

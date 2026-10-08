@@ -21,6 +21,7 @@ import com.wechat.agent.data.MusicController
 import com.wechat.agent.data.ObservationEntry
 import com.wechat.agent.data.ObservationStore
 import com.wechat.agent.data.SettingsManager
+import com.wechat.agent.data.SoulManager
 import com.wechat.agent.data.TypingHabitTracker
 import com.wechat.agent.data.model.AgentStatus
 import com.wechat.agent.data.model.Chat
@@ -72,6 +73,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val decisionEngine = LifeDecisionEngine(memoryManager)
     private val emojiManager = EmojiManager(application)
     private val observationStore = ObservationStore(application)
+    private val soulManager = SoulManager.get(application)
     private val gson = Gson()
 
     // 各角色独立的数据文件（默认角色使用旧文件兼容历史数据）
@@ -846,6 +848,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _streamingContent.value = ""
         _streamingReasoning.value = ""
         val now = System.currentTimeMillis()
+        var fullReply = ""
         try {
             val apiKey = getApiKey()
             val model = getModelName()
@@ -864,10 +867,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 val emotionDesc = "好感度${finalState.affinity}/100·${finalState.mood.label}"
                 val moodDesc = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
-                repository.personaPrompt = buildPersonaPrompt(_chats.value.find { it.id == chatId }?.agentId)
+                val chatAgentId = _chats.value.find { it.id == chatId }?.agentId
+                repository.personaPrompt = buildPersonaPrompt(chatAgentId)
+                repository.soulPrompt = soulManager.readSoul(chatAgentId.orEmpty())
                 val chatMessages = repository.buildChatMessages(model, _currentMessages.value, emotionDesc, moodDesc)
 
-                var fullReply = ""
                 val advanced = settingsManager.getAdvancedSettingsSync()
                 val simulateJob = if (advanced.thinkDisplay) {
                     viewModelScope.launch {
@@ -940,12 +944,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (fullReply.isNotEmpty()) {
-                    val cleaned = fullReply
-                        .replace(Regex("""\*[^*]+\*"""), "")
-                        .replace(Regex("""【[^】]+】"""), "")
-                        .replace(Regex("""（[^）]+）"""), "")
-                        .replace(Regex("""\([^)]+\)"""), "")
-                        .trim()
+                    val cleaned = cleanReply(fullReply)
 
                     val finalThinking = _streamingReasoning.value
                     _streamingContent.value = ""
@@ -981,20 +980,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _isLoading.value = false
                 }
             } catch (e: TimeoutCancellationException) {
-                _streamingReasoning.value = ""
-                val errorMsg = Message(
-                    content = "对方思考得太久没有回应，换个话题再试试？",
-                    role = Role.AGENT, status = MessageStatus.ERROR
-                )
-                finishStreaming(errorMsg.content, chatId, errorMsg.status)
+                // 超时但已收到部分正文：不丢弃，照常落库（避免「回复被吞」）
+                val partial = fullReply.trim()
+                if (partial.isNotEmpty()) {
+                    val finalThinking = _streamingReasoning.value
+                    _streamingContent.value = ""
+                    _streamingReasoning.value = ""
+                    deliverMultiMessage(cleanReply(partial), chatId, finalThinking)
+                } else {
+                    _streamingReasoning.value = ""
+                    val errorMsg = Message(
+                        content = "对方思考得太久没有回应，换个话题再试试？",
+                        role = Role.AGENT, status = MessageStatus.ERROR
+                    )
+                    finishStreaming(errorMsg.content, chatId, errorMsg.status)
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _isLoading.value = false; throw e
             } catch (e: Exception) {
-                val errorMsg = Message(
-                    content = "唔...网络好像不太对劲，等会儿再试试？",
-                    role = Role.AGENT, status = MessageStatus.ERROR
-                )
-                finishStreaming(errorMsg.content, chatId, errorMsg.status)
+                val partial = fullReply.trim()
+                if (partial.isNotEmpty()) {
+                    val finalThinking = _streamingReasoning.value
+                    _streamingContent.value = ""
+                    _streamingReasoning.value = ""
+                    deliverMultiMessage(cleanReply(partial), chatId, finalThinking)
+                } else {
+                    _streamingReasoning.value = ""
+                    val errorMsg = Message(
+                        content = "唔...网络好像不太对劲，等会儿再试试？",
+                        role = Role.AGENT, status = MessageStatus.ERROR
+                    )
+                    finishStreaming(errorMsg.content, chatId, errorMsg.status)
+                }
             }
         }
 
@@ -1533,6 +1550,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         saveChatsToStorage()
     }
 
+    /** 清洗模型正文：去掉星号/方括号/圆括号包裹的动作与状态描写，保留纯对话文本。 */
+    private fun cleanReply(raw: String): String = raw
+        .replace(Regex("""\*[^*]+\*"""), "")
+        .replace(Regex("""【[^】]+】"""), "")
+        .replace(Regex("""（[^）]+）"""), "")
+        .replace(Regex("""\([^)]+\)"""), "")
+        .trim()
+
     private fun finishStreaming(content: String, chatId: String, status: MessageStatus, thinking: String = "") {
         val agentMessage = Message(content = content, role = Role.AGENT, status = status, thinking = thinking)
         _currentMessages.value = _currentMessages.value + agentMessage
@@ -1544,6 +1569,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private suspend fun getApiKey(): String = settingsManager.apiKey.first()
     private suspend fun getModelName(): String = settingsManager.modelName.first()
+
+    /** 把 TTS 合成结果回写到某条消息（语音气泡点击后即时合成+缓存，得到真实音频路径与时长）。 */
+    fun updateMessageAudio(messageId: String, audioUri: String, durationMs: Int) {
+        val updated = _currentMessages.value.map {
+            if (it.id == messageId) it.copy(audioUri = audioUri, audioDurationMs = durationMs) else it
+        }
+        _currentMessages.value = updated
+        val chatId = _currentChatId.value
+        if (chatId != null) syncChatInList(chatId, updated.lastOrNull()?.content ?: "", updated)
+    }
+
+    /** 切换某条消息「转文字」显示状态（语音气泡 ↔ 文本）。 */
+    fun setMessageVoiceToText(messageId: String, voiceToText: Boolean) {
+        val updated = _currentMessages.value.map {
+            if (it.id == messageId) it.copy(voiceToText = voiceToText) else it
+        }
+        _currentMessages.value = updated
+        val chatId = _currentChatId.value
+        if (chatId != null) syncChatInList(chatId, updated.lastOrNull()?.content ?: "", updated)
+    }
 
     fun deleteChat(chatId: String) {
         _chats.value = _chats.value.filter { it.id != chatId }
@@ -1581,6 +1626,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _isLoading.value = true
             _streamingContent.value = ""
             _streamingReasoning.value = ""
+            var fullReply = ""
             try {
                 val apiKey = getApiKey()
                 val model = getModelName()
@@ -1599,7 +1645,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
                 val emotionDesc = "好感度${finalState.affinity}/100·${finalState.mood.label}"
                 val moodDesc = emotionEngine.getMoodDescription(finalState.mood, finalState.affinity)
-                repository.personaPrompt = buildPersonaPrompt(_chats.value.find { it.id == chatId }?.agentId)
+                val chatAgentId = _chats.value.find { it.id == chatId }?.agentId
+                repository.personaPrompt = buildPersonaPrompt(chatAgentId)
+                repository.soulPrompt = soulManager.readSoul(chatAgentId.orEmpty())
                 val imageDataUrl = readImageAsBase64(cachedUri)
                 val replyFlow = if (imageDataUrl != null) {
                     repository.sendVisionMessageStream(
@@ -1617,7 +1665,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
-                var fullReply = ""
                 val simulateJob = if (settingsManager.getAdvancedSettingsSync().thinkDisplay) {
                     viewModelScope.launch {
                         delay(600)
@@ -1647,12 +1694,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 if (fullReply.isNotEmpty()) {
-                    val cleaned = fullReply
-                        .replace(Regex("""\*[^*]+\*"""), "")
-                        .replace(Regex("""【[^】]+】"""), "")
-                        .replace(Regex("""（[^）]+）"""), "")
-                        .replace(Regex("""\([^)]+\)"""), "")
-                        .trim()
+                    val cleaned = cleanReply(fullReply)
 
                     val finalThinking = _streamingReasoning.value
                     _streamingContent.value = ""
@@ -1673,20 +1715,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     _isLoading.value = false
                 }
             } catch (e: TimeoutCancellationException) {
-                _streamingReasoning.value = ""
-                val errorMsg = Message(
-                    content = "对方思考得太久没有回应，换个话题再试试？",
-                    role = Role.AGENT, status = MessageStatus.ERROR
-                )
-                finishStreaming(errorMsg.content, chatId, errorMsg.status)
+                // 超时但已收到部分正文：不丢弃，照常落库（避免「回复被吞」）
+                val partial = fullReply.trim()
+                if (partial.isNotEmpty()) {
+                    val finalThinking = _streamingReasoning.value
+                    _streamingContent.value = ""
+                    _streamingReasoning.value = ""
+                    deliverMultiMessage(cleanReply(partial), chatId, finalThinking)
+                } else {
+                    _streamingReasoning.value = ""
+                    val errorMsg = Message(
+                        content = "对方思考得太久没有回应，换个话题再试试？",
+                        role = Role.AGENT, status = MessageStatus.ERROR
+                    )
+                    finishStreaming(errorMsg.content, chatId, errorMsg.status)
+                }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 _isLoading.value = false; throw e
             } catch (e: Exception) {
-                val errorMsg = Message(
-                    content = "图片收到啦！不过网络好像不太对劲，等会儿再聊？",
-                    role = Role.AGENT, status = MessageStatus.ERROR
-                )
-                finishStreaming(errorMsg.content, chatId, errorMsg.status)
+                val partial = fullReply.trim()
+                if (partial.isNotEmpty()) {
+                    val finalThinking = _streamingReasoning.value
+                    _streamingContent.value = ""
+                    _streamingReasoning.value = ""
+                    deliverMultiMessage(cleanReply(partial), chatId, finalThinking)
+                } else {
+                    _streamingReasoning.value = ""
+                    val errorMsg = Message(
+                        content = "图片收到啦！不过网络好像不太对劲，等会儿再聊？",
+                        role = Role.AGENT, status = MessageStatus.ERROR
+                    )
+                    finishStreaming(errorMsg.content, chatId, errorMsg.status)
+                }
             }
         }
     }

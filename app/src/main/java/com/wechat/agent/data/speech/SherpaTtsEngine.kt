@@ -12,6 +12,9 @@ import com.k2fsa.sherpa.onnx.OfflineTtsConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsModelConfig
 import com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * sherpa-onnx 离线 TTS 引擎（阶段1：VITS-zh-ll 中文）。
@@ -103,6 +106,62 @@ class SherpaTtsEngine(private val modelDir: File) {
             track.release()
         }
         onDone()
+    }
+
+    /**
+     * 合成文本并写入 16-bit PCM 单声道 WAV 文件（用于语音气泡点击后即时合成 + 缓存）。
+     * 返回音频时长（毫秒），失败返回 null。
+     */
+    suspend fun synthesizeToWav(text: String, outputFile: File): Int? = withContext(Dispatchers.IO) {
+        ensureLoaded()
+        val engine = tts ?: return@withContext null
+        if (text.isBlank()) return@withContext null
+        try {
+            val audio: GeneratedAudio = engine.generate(text)
+            val samples = audio.samples
+            if (samples == null || samples.isEmpty()) {
+                Log.w(tag, "synthesizeToWav empty samples: $text")
+                return@withContext null
+            }
+            val sr = audio.sampleRate
+            val dataSize = samples.size * 2
+            val header = wavHeader(sr, dataSize)
+            val bytes = ByteArray(dataSize)
+            for (i in samples.indices) {
+                val v = samples[i].toDouble().coerceIn(-1.0, 1.0)
+                val s = (v * 32767.0).toInt()
+                bytes[i * 2] = (s and 0xFF).toByte()
+                bytes[i * 2 + 1] = ((s shr 8) and 0xFF).toByte()
+            }
+            FileOutputStream(outputFile).use { out ->
+                out.write(header)
+                out.write(bytes)
+            }
+            val durationMs = if (sr > 0) samples.size * 1000L / sr else 0L
+            durationMs.toInt()
+        } catch (e: Exception) {
+            Log.e(tag, "synthesizeToWav error", e)
+            null
+        }
+    }
+
+    /** 构造 44 字节标准 WAV 头（RIFF + fmt + data，16-bit PCM 单声道）。 */
+    private fun wavHeader(sampleRate: Int, dataSize: Int): ByteArray {
+        val buf = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+        buf.put("RIFF".toByteArray(Charsets.US_ASCII))
+        buf.putInt(36 + dataSize)
+        buf.put("WAVE".toByteArray(Charsets.US_ASCII))
+        buf.put("fmt ".toByteArray(Charsets.US_ASCII))
+        buf.putInt(16)          // fmt 子块长度
+        buf.putShort(1)         // PCM 编码
+        buf.putShort(1)         // 单声道
+        buf.putInt(sampleRate)  // 采样率
+        buf.putInt(sampleRate * 2) // 字节率 = 采样率 * 声道数 * 每样本字节数
+        buf.putShort(2)         // 块对齐
+        buf.putShort(16)        // 位深
+        buf.put("data".toByteArray(Charsets.US_ASCII))
+        buf.putInt(dataSize)
+        return buf.array()
     }
 
     fun stopPlayback() {

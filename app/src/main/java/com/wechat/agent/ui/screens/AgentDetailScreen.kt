@@ -82,7 +82,8 @@ fun AgentDetailScreen(
     onEdit: () -> Unit,
     onSendMessage: () -> Unit,
     onClearMemory: () -> Unit,
-    onDeleteAgent: () -> Unit
+    onDeleteAgent: () -> Unit,
+    onEditSoul: () -> Unit = {}
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -185,6 +186,29 @@ fun AgentDetailScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         ProfileRow(label = "性格特点", value = agentGlobalSettings)
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ===== 灵魂文件 soul.md（Agent 模式核心人设）=====
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(Modifier.padding(16.dp)) {
+                    Text("📄 灵魂文件 soul.md", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Agent 模式的核心人设来源，每次回复前实时注入；支持在应用内编辑，也可在外部文件管理器中直接修改", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onEditSoul,
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = WeChatGreen)
+                    ) { Text("编辑灵魂文件", fontWeight = FontWeight.Medium) }
                 }
             }
 
