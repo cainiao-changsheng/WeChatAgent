@@ -222,7 +222,7 @@ fun ChatListItem(chat: Chat, agentAvatar: String = "🤖", agentAvatarUri: Strin
             }
         }
     ) {
-        Column(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        Column(modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background).clickable(onClick = onClick)) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
