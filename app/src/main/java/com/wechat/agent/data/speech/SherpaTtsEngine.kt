@@ -35,7 +35,6 @@ class SherpaTtsEngine(private val modelDir: File) {
                 model = modelFile.absolutePath,
                 tokens = tokens.absolutePath,
                 lexicon = if (lexicon.exists()) lexicon.absolutePath else "",
-                dataDir = modelDir.absolutePath,
             )
             val modelCfg = OfflineTtsModelConfig(
                 vits = vits,
@@ -43,8 +42,14 @@ class SherpaTtsEngine(private val modelDir: File) {
                 debug = false,
                 provider = "cpu",
             )
+            // vits-zh-ll 使用 lexicon + 规则 FST 做中文文本归一化（日期/数字/电话号码），
+            // 不使用 espeak-ng data（data_dir）。此前误设 dataDir 指向模型根目录，
+            // 导致 native 校验因缺少 phontab/phonindex 等文件而失败（Invalid OfflineTtsConfig）。
+            val ruleFsts = listOf("date.fst", "phone.fst", "number.fst")
+                .joinToString(",") { File(modelDir, it).absolutePath }
             val cfg = OfflineTtsConfig(
                 model = modelCfg,
+                ruleFsts = ruleFsts,
                 maxNumSentences = 2,
             )
             tts = OfflineTts(assetManager = null, config = cfg)

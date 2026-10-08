@@ -806,6 +806,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (musicKeywords.any { content.contains(it) }) handleMusicRequest(content)
 
         streamingJob?.cancel()
+        deliveryJob?.cancel()
+        messageDeliverySequence++
         streamingJob = viewModelScope.launch {
             _isLoading.value = true
             _streamingContent.value = ""
@@ -992,7 +994,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     syncChatInList(chatId, msg, _currentMessages.value)
                 }
             } finally {
-                _isLoading.value = false
+                // 仅当本次分段投递仍是最新任务时才复位 loading；
+                // 若已被新消息打断（sequence 已推进），loading 交由新任务接管，避免竞态闪烁。
+                if (seq == messageDeliverySequence) {
+                    _isLoading.value = false
+                }
             }
         }
     }
@@ -1536,6 +1542,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         syncChatInList(chatId, "[图片]", updatedMessages)
 
         streamingJob?.cancel()
+        deliveryJob?.cancel()
+        messageDeliverySequence++
         streamingJob = viewModelScope.launch {
             _isLoading.value = true
             _streamingContent.value = ""
