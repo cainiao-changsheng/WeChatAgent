@@ -1243,7 +1243,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             else "未识别的音量动作：$action"
         }
         return try {
-            val am = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val am = getApplication<Application>().getSystemService(Context.AUDIO_SERVICE) as AudioManager
             when (action) {
                 "up" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
                 "down" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
@@ -1261,7 +1261,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (name.isBlank()) return "未指定要打开的应用名称。"
         val query = name.trim()
         return try {
-            val pm = application.packageManager
+            val pm = getApplication<Application>().packageManager
             val candidates = pm.queryIntentActivities(
                 Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
             ).mapNotNull { ri ->
@@ -1279,7 +1279,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     "无法打开「${best.first}」：该应用没有可启动的入口。"
                 } else {
                     launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    application.startActivity(launch)
+                    getApplication<Application>().startActivity(launch)
                     "已打开「${best.first}」。"
                 }
             }
