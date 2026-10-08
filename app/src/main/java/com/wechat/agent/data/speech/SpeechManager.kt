@@ -4,10 +4,12 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +61,7 @@ class SpeechManager private constructor(private val context: Context) {
     private var speakJob: Job? = null
     private var voiceRecordJob: Job? = null
     private var voicePlayJob: Job? = null
+    private var voicePlayChannel = Channel<Pair<String, () -> Unit>>(Channel.UNLIMITED)
     @Volatile private var recording = false
     @Volatile private var recordCancelled = false
 
@@ -257,24 +260,36 @@ class SpeechManager private constructor(private val context: Context) {
         asrEngine?.stop()
     }
 
-    /** 播放语音消息（WAV）。 */
+    /** 播放语音消息（WAV）。多次调用会排队顺序播放：每条完整播完后再播下一条。 */
     fun playVoiceMessage(filePath: String, onDone: () -> Unit = {}) {
-        voicePlayJob?.cancel()
-        _state.value = _state.value.copy(voicePlaying = true)
-        voicePlayJob = scope.launch {
-            try {
-                playWav(File(filePath))
-            } catch (e: Exception) {
-                _state.value = _state.value.copy(lastError = "语音播放失败：${e.message}")
-            } finally {
-                _state.value = _state.value.copy(voicePlaying = false)
-                onDone()
+        // 惰性启动单一消费协程；worker 常驻，靠 channel 串行化播放，天然保证“播完再播下一条”。
+        if (voicePlayJob?.isActive != true) {
+            val ch = Channel<Pair<String, () -> Unit>>(Channel.UNLIMITED)
+            voicePlayChannel = ch
+            voicePlayJob = scope.launch {
+                for ((path, done) in ch) {
+                    _state.value = _state.value.copy(voicePlaying = true)
+                    try {
+                        playWav(File(path))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        _state.value = _state.value.copy(lastError = "语音播放失败：${e.message}")
+                    } finally {
+                        _state.value = _state.value.copy(voicePlaying = false)
+                        done()
+                    }
+                }
             }
         }
+        voicePlayChannel.trySend(filePath to onDone)
     }
 
     fun stopVoicePlayback() {
         voicePlayJob?.cancel()
+        // 重建 channel，丢弃尚未播放的排队项
+        voicePlayChannel = Channel(Channel.UNLIMITED)
+        voicePlayJob = null
         _state.value = _state.value.copy(voicePlaying = false)
     }
 
@@ -307,7 +322,8 @@ class SpeechManager private constructor(private val context: Context) {
             try {
                 track.write(bytes, 0, bytes.size)
                 track.play()
-                val durationMs = bytes.size / (sampleRate * 2)
+                // 16bit 单声道：bytes.size / 2 = 采样数，/ sampleRate = 秒，* 1000 = 毫秒
+                val durationMs = bytes.size / (sampleRate * 2) * 1000
                 delay(durationMs + 120L)
             } finally {
                 try { track.stop() } catch (_: Exception) {}

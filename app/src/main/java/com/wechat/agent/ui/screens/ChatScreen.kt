@@ -123,6 +123,7 @@ import com.wechat.agent.ui.theme.DarkSelfBubble
 import com.wechat.agent.ui.theme.OtherBubble
 import com.wechat.agent.ui.theme.SelfBubble
 import com.wechat.agent.ui.theme.WeChatGreen
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -170,12 +171,16 @@ fun ChatScreen(
     val speech = remember { SpeechManager.get(context.applicationContext) }
     val speechState by speech.state.collectAsState()
     LaunchedEffect(Unit) { speech.refresh() }
-    // 语音播放：模型/文字气泡点击后，即时合成 + 缓存并朗读（用户文字气泡只朗读、不落库）
+    // 语音播放：模型/文字气泡点击后，即时合成 + 缓存并朗读（用户文字气泡只朗读、不落库）。
+    // 用单一 job 串行化合成+播放，点新气泡即取消上一条，避免并发合成把音频串到别条消息上。
+    val ttsPlayJob = remember { mutableStateOf<Job?>(null) }
     val handlePlayVoice: (Message, String) -> Unit = { msg, text ->
+        ttsPlayJob.value?.cancel()
+        speech.stopSpeaking()
         if (msg.audioUri.isNotEmpty()) {
             speech.playVoiceMessage(msg.audioUri)
         } else if (msg.role == Role.AGENT) {
-            scope.launch {
+            ttsPlayJob.value = scope.launch {
                 val result = speech.synthesizeToCache(text)
                 if (result != null) {
                     onUpdateMessageAudio(msg.id, result.first, result.second)
@@ -855,7 +860,12 @@ private fun AgentVoiceBubble(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
             .background(bubbleColor)
-            .combinedClickable(onClick = onClick, onLongClick = onLongPress)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { onLongPress() }
+                )
+            }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
