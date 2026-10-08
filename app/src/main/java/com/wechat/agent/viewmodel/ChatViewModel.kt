@@ -4,7 +4,9 @@ import android.app.Application
 import android.app.AppOpsManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
+import android.media.AudioManager
 import android.os.Process
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -923,7 +925,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                     .mapIndexed { i, p -> "照片${i + 1}: $p" }
                                     .joinToString("\n")
                             },
-                            postMomentProvider = { content, imageUri -> agentPostMoment(content, imageUri) }
+                            postMomentProvider = { content, imageUri -> agentPostMoment(content, imageUri) },
+                            nowPlayingProvider = { formatNowPlaying() },
+                            musicControlProvider = { action -> controlMusic(action) },
+                            volumeControlProvider = { action -> adjustVolume(action) },
+                            openAppProvider = { name -> openApp(name) }
                         )
                     )
                     val agentCollect: suspend (AgentStreamPiece) -> Unit = { piece ->
@@ -1182,6 +1188,103 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             delay(400)
             refreshNowPlaying()
+        }
+    }
+
+    /** Agent 工具：查询当前正在播放的音乐，返回自然语言描述。 */
+    private fun formatNowPlaying(): String {
+        val np = try { musicController.getNowPlaying() } catch (_: Exception) { MusicController.NowPlaying() }
+        if (np.title.isBlank() && np.artist.isBlank()) {
+            return "当前没有检测到正在播放的音乐（对方可能没在放歌，或音乐 App 已停止播放）。"
+        }
+        val status = if (np.isPlaying) "正在播放" else "已暂停"
+        val artist = if (np.artist.isNotBlank()) " - ${np.artist}" else ""
+        return "对方手机当前$status：《${np.title}$artist》"
+    }
+
+    /** Agent 工具：控制音乐播放，返回执行结果文本。 */
+    private fun controlMusic(action: String): String {
+        val successText = when (action) {
+            "play" -> "已切换为播放"
+            "pause" -> "已暂停播放"
+            "next" -> "已切到下一首"
+            "previous" -> "已切回上一首"
+            else -> null
+        }
+        if (successText == null) {
+            return if (action.isBlank()) "参数缺失：需要指定 action（play/pause/next/previous）。"
+            else "未识别的音乐控制动作：$action"
+        }
+        val ok = try {
+            when (action) {
+                "play" -> musicController.play()
+                "pause" -> musicController.pause()
+                "next" -> musicController.skipNext()
+                "previous" -> musicController.skipPrevious()
+            }
+            true
+        } catch (_: Exception) { false }
+        if (!ok) return "音乐控制失败：当前可能没有可控制的音乐播放（对方没在放歌，或音乐 App 不支持该控制）。"
+        refreshNowPlayingLater()
+        return "$successText。"
+    }
+
+    /** Agent 工具：调节媒体音量，返回执行结果文本。 */
+    private fun adjustVolume(action: String): String {
+        val successText = when (action) {
+            "up" -> "音量已调高"
+            "down" -> "音量已调低"
+            "mute" -> "已静音"
+            "unmute" -> "已取消静音"
+            else -> null
+        }
+        if (successText == null) {
+            return if (action.isBlank()) "参数缺失：需要指定 action（up/down/mute/unmute）。"
+            else "未识别的音量动作：$action"
+        }
+        return try {
+            val am = application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            when (action) {
+                "up" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_RAISE, 0)
+                "down" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_LOWER, 0)
+                "mute" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
+                "unmute" -> am.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
+            }
+            "$successText。"
+        } catch (_: Exception) {
+            "音量调节失败：设备不支持或权限受限。"
+        }
+    }
+
+    /** Agent 工具：按名称打开已安装应用，返回执行结果文本。 */
+    private fun openApp(name: String): String {
+        if (name.isBlank()) return "未指定要打开的应用名称。"
+        val query = name.trim()
+        return try {
+            val pm = application.packageManager
+            val candidates = pm.queryIntentActivities(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0
+            ).mapNotNull { ri ->
+                val label = ri.loadLabel(pm).toString()
+                if (label.isBlank()) null else label to ri.activityInfo.packageName
+            }
+            val best = candidates.firstOrNull { it.first.equals(query, ignoreCase = true) }
+                ?: candidates.firstOrNull { it.second.equals(query, ignoreCase = true) }
+                ?: candidates.firstOrNull { it.first.contains(query, ignoreCase = true) }
+            if (best == null) {
+                "没有找到名为「$query」的应用，请让对方确认应用已安装，或换个更准确的名字。"
+            } else {
+                val launch = pm.getLaunchIntentForPackage(best.second)
+                if (launch == null) {
+                    "无法打开「${best.first}」：该应用没有可启动的入口。"
+                } else {
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    application.startActivity(launch)
+                    "已打开「${best.first}」。"
+                }
+            }
+        } catch (_: Exception) {
+            "打开应用失败：$query"
         }
     }
 

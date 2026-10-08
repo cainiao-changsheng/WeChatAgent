@@ -37,7 +37,11 @@ object AgentToolRegistry {
         stickerSearchProvider: suspend (String) -> String,
         stickerImageProvider: suspend (String) -> String?,
         photosProvider: suspend () -> String,
-        postMomentProvider: suspend (String, String) -> String
+        postMomentProvider: suspend (String, String) -> String,
+        nowPlayingProvider: suspend () -> String,
+        musicControlProvider: suspend (String) -> String,
+        volumeControlProvider: suspend (String) -> String,
+        openAppProvider: suspend (String) -> String
     ): List<AgentToolSpec> = listOf(
         AgentToolSpec(
             name = "get_current_time",
@@ -161,6 +165,70 @@ object AgentToolRegistry {
                 val imageUri = (args["imageUri"] as? String)?.trim() ?: ""
                 val resolved = if (stickerName.isNotEmpty()) stickerImageProvider(stickerName) else null
                 postMomentProvider(content, resolved ?: imageUri)
+            }
+        ),
+        AgentToolSpec(
+            name = "query_now_playing",
+            description = "查询对方手机当前正在播放的音乐（歌名/歌手/是否在播放）。仅在对方聊到正在听什么歌、想让你切歌或放音乐时先调用；普通闲聊勿调用。",
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to emptyMap<String, Any>(),
+                "required" to emptyList<String>()
+            ),
+            executor = { _ -> nowPlayingProvider() }
+        ),
+        AgentToolSpec(
+            name = "control_music",
+            description = "控制对方手机上的音乐播放。action 取值：play（播放）、pause（暂停）、next（下一首）、previous（上一首）。仅在对方明确要你放歌/暂停/切歌时调用。",
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "action" to mapOf(
+                        "type" to "string",
+                        "description" to "要执行的音乐控制动作：play / pause / next / previous。"
+                    )
+                ),
+                "required" to listOf("action")
+            ),
+            executor = { args ->
+                val action = (args["action"] as? String)?.trim()?.lowercase() ?: ""
+                musicControlProvider(action)
+            }
+        ),
+        AgentToolSpec(
+            name = "adjust_volume",
+            description = "调节对方手机的媒体音量。action 取值：up（调高）、down（调低）、mute（静音）、unmute（取消静音）。仅在对方让你调音量或嫌吵/听不清时调用。",
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "action" to mapOf(
+                        "type" to "string",
+                        "description" to "音量调节动作：up / down / mute / unmute。"
+                    )
+                ),
+                "required" to listOf("action")
+            ),
+            executor = { args ->
+                val action = (args["action"] as? String)?.trim()?.lowercase() ?: ""
+                volumeControlProvider(action)
+            }
+        ),
+        AgentToolSpec(
+            name = "open_app",
+            description = "在对方手机上打开一个已安装的应用，如微信、相机、地图、抖音、哔哩哔哩、网易云音乐等。appName 填应用的中文名或常见名（如'微信'、'相机'、'高德地图'）。仅在对方明确要打开某个应用时调用。",
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "appName" to mapOf(
+                        "type" to "string",
+                        "description" to "要打开的应用名称。"
+                    )
+                ),
+                "required" to listOf("appName")
+            ),
+            executor = { args ->
+                val appName = (args["appName"] as? String)?.trim() ?: ""
+                openAppProvider(appName)
             }
         )
     )
