@@ -997,7 +997,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 finishStreaming(errorMsg.content, chatId, errorMsg.status)
             }
         }
-    }
 
     private fun deliverMultiMessage(text: String, chatId: String, thinking: String = "") {
         val splitEnabled = settingsManager.getAdvancedSettingsSync().splitMessages
