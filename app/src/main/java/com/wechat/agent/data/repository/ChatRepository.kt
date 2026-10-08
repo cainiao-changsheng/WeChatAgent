@@ -2,6 +2,7 @@ package com.wechat.agent.data.repository
 
 import com.wechat.agent.data.AppLogger
 import com.wechat.agent.data.MemoryManager
+import com.wechat.agent.data.SettingsManager
 import com.wechat.agent.agent.AgentToolSpec
 import com.wechat.agent.data.network.ChatMessage
 import com.wechat.agent.data.network.ChatRequest
@@ -14,6 +15,7 @@ import com.wechat.agent.data.network.VisionChatRequest
 import com.wechat.agent.data.network.VisionContent
 import com.wechat.agent.data.network.VisionMessage
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -22,7 +24,12 @@ import kotlinx.coroutines.withTimeout
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
-class ChatRepository(private val memoryManager: MemoryManager) {
+class ChatRepository(
+    private val memoryManager: MemoryManager,
+    private val settingsManager: SettingsManager
+) {
+
+    private val gson = Gson()
 
     var formatRule: String = ""
 
@@ -49,6 +56,11 @@ class ChatRepository(private val memoryManager: MemoryManager) {
 
         val systemPrompt = buildString {
             appendLine(identity)
+            appendLine()
+            appendLine("【回复原则 - 快速直接】")
+            appendLine("1. 看到对方消息后直接给出自然回复，不要长篇分析、不要内心独白、不要反复推敲。")
+            appendLine("2. 除非确实需要（查时间、查记忆、找表情）才调用工具；普通闲聊一律直接回答，禁止每条消息都调用工具。")
+            appendLine("3. 回复简短自然，像微信聊天，一两句说清即可，不要绕圈子。")
             appendLine()
             if (personaPrompt.isNotBlank()) {
                 appendLine(personaPrompt)
@@ -89,13 +101,28 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         return chatMessages
     }
 
+    /** 将请求数据类序列化为 JsonObject，并把「自定义请求参数」浅合并到顶层（用户参数覆盖默认字段）。 */
+    private fun buildRequestBody(any: Any): JsonObject {
+        val obj = gson.toJsonTree(any).asJsonObject
+        val extraText = settingsManager.getAdvancedSettingsSync().customParams.trim()
+        if (extraText.isNotEmpty()) {
+            try {
+                val extra = gson.fromJson(extraText, JsonObject::class.java)
+                extra?.entrySet()?.forEach { (key, value) -> obj.add(key, value) }
+            } catch (e: Exception) {
+                AppLogger.log("ChatRepository", "自定义请求参数解析失败，已忽略: ${e.message}")
+            }
+        }
+        return obj
+    }
+
     suspend fun sendMessage(
         model: String,
         apiKey: String,
         chatMessages: List<ChatMessage>
     ): Result<String> = kotlinx.coroutines.withContext(Dispatchers.IO) {
         try {
-            val request = ChatRequest(model = model, messages = chatMessages, stream = false)
+            val request = buildRequestBody(ChatRequest(model = model, messages = chatMessages, stream = false))
             val response = RetrofitClient.getApiService().sendMessage(
                 authorization = "Bearer $apiKey",
                 request = request
@@ -140,11 +167,13 @@ class ChatRepository(private val memoryManager: MemoryManager) {
             var lastError: Exception? = null
 
             for (round in 0 until MAX_AGENT_ROUNDS) {
-                val request = ChatRequest(
-                    model = model,
-                    messages = messages,
-                    stream = false,
-                    tools = if (supportsTools) tools.map { it.toChatTool() } else null
+                val request = buildRequestBody(
+                    ChatRequest(
+                        model = model,
+                        messages = messages,
+                        stream = false,
+                        tools = if (supportsTools) tools.map { it.toChatTool() } else null
+                    )
                 )
                 val response = RetrofitClient.getApiService().sendMessage(
                     authorization = "Bearer $apiKey",
@@ -155,7 +184,7 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                     if (supportsTools && response.code() == 400) {
                         toolsUnsupportedModels.add(model)
                         AppLogger.log("ChatRepository", "模型 $model 不支持 tools，降级纯文本模式")
-                        val fallback = ChatRequest(model = model, messages = messages, stream = false)
+                        val fallback = buildRequestBody(ChatRequest(model = model, messages = messages, stream = false))
                         val fbResponse = RetrofitClient.getApiService().sendMessage(
                             authorization = "Bearer $apiKey",
                             request = fallback
@@ -267,11 +296,13 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                 var textThisRound = ""
                 val toolCalls = try {
                     withTimeout(ROUND_TIMEOUT_MS) {
-                        val request = ChatRequest(
-                            model = model,
-                            messages = messages,
-                            stream = true,
-                            tools = if (supportsTools) tools.map { it.toChatTool() } else null
+                        val request = buildRequestBody(
+                            ChatRequest(
+                                model = model,
+                                messages = messages,
+                                stream = true,
+                                tools = if (supportsTools) tools.map { it.toChatTool() } else null
+                            )
                         )
                         val response = RetrofitClient.getApiService().sendMessageStream(
                             authorization = "Bearer $apiKey",
@@ -407,18 +438,20 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         imageDataUrl: String
     ): Result<String> = kotlinx.coroutines.withContext(Dispatchers.IO) {
         try {
-            val request = VisionChatRequest(
-                model = model,
-                messages = listOf(
-                    VisionMessage(
-                        role = "user",
-                        content = listOf(
-                            VisionContent(type = "text", text = prompt),
-                            VisionContent(type = "image_url", imageUrl = mapOf("url" to imageDataUrl))
+            val request = buildRequestBody(
+                VisionChatRequest(
+                    model = model,
+                    messages = listOf(
+                        VisionMessage(
+                            role = "user",
+                            content = listOf(
+                                VisionContent(type = "text", text = prompt),
+                                VisionContent(type = "image_url", imageUrl = mapOf("url" to imageDataUrl))
+                            )
                         )
-                    )
-                ),
-                stream = false
+                    ),
+                    stream = false
+                )
             )
             val response = RetrofitClient.getApiService().sendVisionMessage(
                 authorization = "Bearer $apiKey",
@@ -477,7 +510,7 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         messages: List<VisionMessage>
     ): Flow<StreamPiece> = flow {
         try {
-            val request = VisionChatRequest(model = model, messages = messages, stream = true)
+            val request = buildRequestBody(VisionChatRequest(model = model, messages = messages, stream = true))
             val response = RetrofitClient.getApiService().sendVisionMessageStream(
                 authorization = "Bearer $apiKey",
                 request = request
@@ -525,7 +558,7 @@ class ChatRepository(private val memoryManager: MemoryManager) {
         chatMessages: List<ChatMessage>
     ): Flow<StreamPiece> = flow {
         try {
-            val request = ChatRequest(model = model, messages = chatMessages, stream = true)
+            val request = buildRequestBody(ChatRequest(model = model, messages = chatMessages, stream = true))
             val response = RetrofitClient.getApiService().sendMessageStream(
                 authorization = "Bearer $apiKey",
                 request = request
@@ -613,7 +646,7 @@ class ChatRepository(private val memoryManager: MemoryManager) {
                 appendLine("3. 下次可以主动聊什么话题？")
             }
             val messages = listOf(ChatMessage(role = "user", content = prompt))
-            val request = ChatRequest(model = model, messages = messages, stream = false)
+            val request = buildRequestBody(ChatRequest(model = model, messages = messages, stream = false))
             val response = RetrofitClient.getApiService().sendMessage(
                 authorization = "Bearer $apiKey",
                 request = request

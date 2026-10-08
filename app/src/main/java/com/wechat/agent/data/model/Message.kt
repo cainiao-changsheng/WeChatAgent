@@ -9,7 +9,9 @@ data class Message(
     val timestamp: Long = System.currentTimeMillis(),
     var status: MessageStatus = MessageStatus.SENDING,
     val imageUri: String = "",
-    val thinking: String = ""
+    val thinking: String = "",
+    val audioUri: String = "",
+    val audioDurationMs: Int = 0
 )
 
 enum class Role {

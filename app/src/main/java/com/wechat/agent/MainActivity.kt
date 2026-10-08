@@ -266,6 +266,9 @@ fun AppNavigation() {
                 },
                 onSendMessage = { chatViewModel.sendMessage(it) },
                 onSendImage = { chatViewModel.sendImageMessage(it) },
+                onSendVoiceMessage = { path, durationMs, transcript ->
+                    chatViewModel.sendVoiceMessage(path, durationMs, transcript)
+                },
                 onPlayMusic = { chatViewModel.playMusic() },
                 onPauseMusic = { chatViewModel.pauseMusic() },
                 onSkipNext = { chatViewModel.skipNextMusic() },

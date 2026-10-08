@@ -17,6 +17,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,6 +53,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MusicNote
@@ -90,6 +92,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -135,6 +138,7 @@ fun ChatScreen(
     onBack: () -> Unit,
     onSendMessage: (String) -> Unit,
     onSendImage: (String) -> Unit,
+    onSendVoiceMessage: (String, Int, String) -> Unit = { _, _, _ -> },
     onPlayMusic: () -> Unit = {},
     onPauseMusic: () -> Unit = {},
     onSkipNext: () -> Unit = {},
@@ -146,6 +150,7 @@ fun ChatScreen(
     var inputText by remember { mutableStateOf("") }
     var showEmojiPanel by remember { mutableStateOf(false) }
     var plusMenuExpanded by remember { mutableStateOf(false) }
+    var voiceMode by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val isDark = MaterialTheme.colorScheme.background == Color(0xFF191919)
     val context = LocalContext.current
@@ -157,11 +162,16 @@ fun ChatScreen(
     val micPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* 授权结果在下一次点击时再判断 */ }
-    val handleVoiceInput: () -> Unit = {
+    // 切换语音输入模式：开启后文本框变成"按住说话"按钮
+    val toggleVoiceMode: () -> Unit = {
         plusMenuExpanded = false
-        if (speechState.listening) {
-            speech.stopListening()
-        } else if (!advSettings.voiceInput) {
+        showEmojiPanel = false
+        voiceMode = !voiceMode
+    }
+    // 按住说话：检查权限/设置/模型后开始录音，结束识别后发送语音消息
+    val startVoiceRecord: () -> Unit = {
+        plusMenuExpanded = false
+        if (!advSettings.voiceInput) {
             Toast.makeText(context, "语音输入未开启，请到 设置-语音功能 开启", Toast.LENGTH_SHORT).show()
         } else if (!speechState.asrReady) {
             Toast.makeText(context, "语音识别模型未就绪，请到 设置-语音功能 下载", Toast.LENGTH_SHORT).show()
@@ -172,14 +182,11 @@ fun ChatScreen(
             if (!granted) {
                 micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             } else {
-                speech.startListening(onFinal = { text ->
+                speech.startVoiceRecording { audioPath, durationMs, transcript ->
                     Handler(Looper.getMainLooper()).post {
-                        if (text.isNotBlank()) {
-                            inputText = text
-                            onTypingChange(true)
-                        }
+                        onSendVoiceMessage(audioPath, durationMs, transcript)
                     }
-                })
+                }
             }
         }
     }
@@ -381,7 +388,12 @@ fun ChatScreen(
                     onPlusMenuChange = { plusMenuExpanded = it },
                     voiceListening = speechState.listening,
                     voicePartialText = speechState.partialText,
-                    onVoiceInput = handleVoiceInput,
+                    onVoiceInput = toggleVoiceMode,
+                    voiceMode = voiceMode,
+                    onToggleVoiceMode = toggleVoiceMode,
+                    onRecordStart = startVoiceRecord,
+                    onRecordEnd = { speech.finishVoiceRecording() },
+                    onRecordCancel = { speech.cancelVoiceRecording() },
                     enabled = true // 回复期间不锁定输入：发新消息即打断当前生成（sendMessage 会 cancel 旧 streamingJob）
                 )
                 AnimatedVisibility(visible = showEmojiPanel) {
@@ -654,7 +666,14 @@ fun MessageBubble(
                     }
                     Spacer(modifier = Modifier.height(4.dp))
                 }
-                if ((if (isUser) message.content else parsed?.text ?: message.content).isNotEmpty()) {
+                if (message.audioUri.isNotEmpty()) {
+                    VoiceMessageBubble(
+                        audioUri = message.audioUri,
+                        durationMs = message.audioDurationMs,
+                        bubbleColor = bubbleColor,
+                        isDark = isDark
+                    )
+                } else if ((if (isUser) message.content else parsed?.text ?: message.content).isNotEmpty()) {
                     Box(
                         modifier = Modifier
                             .onGloballyPositioned { coordinates ->
@@ -703,6 +722,44 @@ fun MessageBubble(
     }
 }
 
+/** 语音消息气泡：扬声器/播放图标 + 时长，点击播放或停止。 */
+@Composable
+private fun VoiceMessageBubble(
+    audioUri: String,
+    durationMs: Int,
+    bubbleColor: Color,
+    isDark: Boolean
+) {
+    val context = LocalContext.current
+    val speech = remember { SpeechManager.get(context.applicationContext) }
+    val speechState by speech.state.collectAsState()
+    val seconds = maxOf(1, (durationMs + 500) / 1000)
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(bubbleColor)
+            .clickable {
+                if (speechState.voicePlaying) speech.stopVoicePlayback()
+                else speech.playVoiceMessage(audioUri)
+            }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            if (speechState.voicePlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+            contentDescription = if (speechState.voicePlaying) "停止" else "播放",
+            tint = if (!isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            "$seconds″",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (!isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
 @Composable
 fun ChatInputBar(
     inputText: String,
@@ -716,6 +773,11 @@ fun ChatInputBar(
     voiceListening: Boolean = false,
     voicePartialText: String = "",
     onVoiceInput: () -> Unit = {},
+    voiceMode: Boolean = false,
+    onToggleVoiceMode: () -> Unit = {},
+    onRecordStart: () -> Unit = {},
+    onRecordEnd: () -> Unit = {},
+    onRecordCancel: () -> Unit = {},
     enabled: Boolean
 ) {
     Column(
@@ -739,7 +801,7 @@ fun ChatInputBar(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    if (voicePartialText.isBlank()) "正在聆听…（再点一次“语音输入”结束）"
+                    if (voicePartialText.isBlank()) "正在聆听…（松开发送）"
                     else "聆听中：$voicePartialText",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
@@ -763,6 +825,41 @@ fun ChatInputBar(
             modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 左侧：语音输入 / 键盘 切换按钮（替换原“表情”按钮位置）
+            IconButton(onClick = onToggleVoiceMode, enabled = enabled) {
+                Icon(
+                    if (voiceMode) Icons.Default.Keyboard else Icons.Default.Mic,
+                    contentDescription = if (voiceMode) "键盘" else "语音输入",
+                    tint = if (voiceMode) WeChatGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            if (voiceMode) {
+                // 语音模式：文本框变为“按住说话”按钮
+                HoldToSpeakButton(
+                    modifier = Modifier.weight(1f),
+                    listening = voiceListening,
+                    enabled = enabled,
+                    onRecordStart = onRecordStart,
+                    onRecordEnd = onRecordEnd,
+                    onRecordCancel = onRecordCancel
+                )
+            } else {
+                OutlinedTextField(
+                    value = inputText, onValueChange = onInputChange, modifier = Modifier.weight(1f),
+                    placeholder = { Text("输入消息...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
+                    shape = RoundedCornerShape(24.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = WeChatGreen, unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    maxLines = 4,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                    enabled = enabled
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            // 表情按钮移到输入框右侧（与微信布局一致）
             IconButton(onClick = onToggleEmoji, enabled = enabled) {
                 Icon(
                     Icons.Default.EmojiEmotions,
@@ -771,30 +868,7 @@ fun ChatInputBar(
                 )
             }
             Spacer(modifier = Modifier.width(4.dp))
-            OutlinedTextField(
-                value = inputText, onValueChange = onInputChange, modifier = Modifier.weight(1f),
-                placeholder = { Text("输入消息...", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
-                shape = RoundedCornerShape(24.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = WeChatGreen, unfocusedBorderColor = Color.Transparent,
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant),
-                maxLines = 4,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-                enabled = enabled
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            if (inputText.isBlank()) {
-                IconButton(
-                    onClick = { onPlusMenuChange(!plusMenuExpanded) },
-                    enabled = enabled,
-                    modifier = Modifier.size(44.dp).clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "更多",
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                }
-            } else {
+            if (!voiceMode && inputText.isNotBlank()) {
                 IconButton(
                     onClick = onSend, enabled = enabled,
                     modifier = Modifier.size(44.dp).clip(CircleShape).background(
@@ -804,8 +878,60 @@ fun ChatInputBar(
                         tint = if (enabled) Color.White
                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
                 }
+            } else {
+                IconButton(
+                    onClick = { onPlusMenuChange(!plusMenuExpanded) },
+                    enabled = enabled,
+                    modifier = Modifier.size(44.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "更多",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                }
             }
         }
+    }
+}
+
+/** 按住说话按钮：按下开始录音，松开发送，滑出取消。 */
+@Composable
+private fun HoldToSpeakButton(
+    modifier: Modifier = Modifier,
+    listening: Boolean,
+    enabled: Boolean,
+    onRecordStart: () -> Unit,
+    onRecordEnd: () -> Unit,
+    onRecordCancel: () -> Unit
+) {
+    var pressing by remember { mutableStateOf(false) }
+    val active = pressing || listening
+    Box(
+        modifier = modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(
+                if (active) WeChatGreen.copy(alpha = 0.25f)
+                else MaterialTheme.colorScheme.surfaceVariant
+            )
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                detectTapGestures(
+                    onPress = {
+                        pressing = true
+                        onRecordStart()
+                        val released = tryAwaitRelease()
+                        pressing = false
+                        if (released) onRecordEnd() else onRecordCancel()
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            if (active) "松开 发送" else "按住 说话",
+            color = if (active) WeChatGreen else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }
 

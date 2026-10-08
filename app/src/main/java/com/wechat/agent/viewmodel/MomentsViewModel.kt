@@ -19,7 +19,7 @@ class MomentsViewModel(application: Application) : AndroidViewModel(application)
 
     private val memoryManager = MemoryManager(application)
     private val settingsManager = SettingsManager.getInstance(application)
-    private val repository = ChatRepository(memoryManager)
+    private val repository = ChatRepository(memoryManager, settingsManager)
     private val generator = MomentsGenerator(memoryManager)
     private val gson = Gson()
 

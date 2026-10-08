@@ -60,7 +60,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val settingsManager = SettingsManager.getInstance(application)
     private val memoryManager = MemoryManager(application)
     private val emotionEngine = EmotionEngine(memoryManager)
-    private val repository = ChatRepository(memoryManager)
+    private val repository = ChatRepository(memoryManager, settingsManager)
     private val musicController = MusicController(application)
     private val lifeSimulator = LifeSimulator(
         application.getSharedPreferences("life_sim", 0), memoryManager
@@ -808,16 +808,50 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         streamingJob?.cancel()
         deliveryJob?.cancel()
         messageDeliverySequence++
-        streamingJob = viewModelScope.launch {
-            _isLoading.value = true
-            _streamingContent.value = ""
-            _streamingReasoning.value = ""
-            try {
-                val apiKey = getApiKey()
-                val model = getModelName()
-                val state = _emotionState.value
+        streamingJob = viewModelScope.launch { streamAndDeliver(chatId, content) }
+    }
 
-                val userEmotion = emotionEngine.analyzeEmotion(content)
+    /** 发送语音消息：气泡展示语音，AI 侧用识别文本理解。 */
+    fun sendVoiceMessage(audioUri: String, durationMs: Int, transcript: String) {
+        val now = System.currentTimeMillis()
+        val delaySinceLast = if (lastUserMessageTime > 0) now - lastUserMessageTime else 2000L
+        lastUserMessageTime = now
+        typingTracker.recordUserMessage(transcript.ifBlank { "语音消息" }, delaySinceLast)
+        repository.formatRule = typingTracker.getFormatRule()
+
+        val chatId = _currentChatId.value ?: createNewChat()
+        _chats.value.find { it.id == chatId }?.agentId?.takeIf { it.isNotBlank() }
+            ?.let { memoryManager.setActiveAgent(it) }
+        val userMessage = Message(
+            content = transcript,
+            role = Role.USER,
+            audioUri = audioUri,
+            audioDurationMs = durationMs
+        )
+        val updatedMessages = _currentMessages.value + userMessage
+        _currentMessages.value = updatedMessages
+        syncChatInList(chatId, "[语音]", updatedMessages)
+
+        streamingJob?.cancel()
+        deliveryJob?.cancel()
+        messageDeliverySequence++
+        streamingJob = viewModelScope.launch {
+            streamAndDeliver(chatId, transcript.ifBlank { "（对方发来一条语音消息）" })
+        }
+    }
+
+    /** 共用回复管线：情感分析 → 组织上下文 → 流式/agent 拉取 → 分段投递。 */
+    private suspend fun streamAndDeliver(chatId: String, content: String) {
+        _isLoading.value = true
+        _streamingContent.value = ""
+        _streamingReasoning.value = ""
+        val now = System.currentTimeMillis()
+        try {
+            val apiKey = getApiKey()
+            val model = getModelName()
+            val state = _emotionState.value
+
+            val userEmotion = emotionEngine.analyzeEmotion(content)
                 val newState = emotionEngine.updateAffinity(state, userEmotion)
                 val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
                 val newMood = emotionEngine.deriveMood(newState, userEmotion, hour)

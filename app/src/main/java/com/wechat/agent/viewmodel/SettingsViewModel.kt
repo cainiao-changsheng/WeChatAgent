@@ -134,11 +134,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val reply = runCatching {
                 RetrofitClient.updateBaseUrl(url)
-                val request = ChatRequest(
-                    model = model,
-                    messages = listOf(ChatMessage(role = "user", content = TEST_MESSAGE)),
-                    stream = false
-                )
+                val request = com.google.gson.Gson().toJsonTree(
+                    ChatRequest(
+                        model = model,
+                        messages = listOf(ChatMessage(role = "user", content = TEST_MESSAGE)),
+                        stream = false
+                    )
+                ).asJsonObject
                 val resp = RetrofitClient.getApiService().sendMessage(
                     authorization = "Bearer $key",
                     request = request

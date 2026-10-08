@@ -1,15 +1,20 @@
 package com.wechat.agent.data.speech
 
 import android.content.Context
+import android.media.AudioAttributes
+import android.media.AudioFormat
+import android.media.AudioTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
  * 语音能力协调器（单例）：集中管理模型下载状态、ASR 录音识别、TTS 播放。
@@ -32,7 +37,8 @@ class SpeechManager private constructor(private val context: Context) {
         val listening: Boolean = false,
         val speaking: Boolean = false,
         val partialText: String = "",
-        val lastError: String = ""
+        val lastError: String = "",
+        val voicePlaying: Boolean = false
     )
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -49,6 +55,10 @@ class SpeechManager private constructor(private val context: Context) {
     private var ttsEngine: SherpaTtsEngine? = null
     private var listenJob: Job? = null
     private var speakJob: Job? = null
+    private var voiceRecordJob: Job? = null
+    private var voicePlayJob: Job? = null
+    @Volatile private var recording = false
+    @Volatile private var recordCancelled = false
 
     private fun modelsRoot(): File = ModelDownloadManager.modelsRoot(context)
 
@@ -159,9 +169,128 @@ class SpeechManager private constructor(private val context: Context) {
         _state.value = _state.value.copy(speaking = false)
     }
 
+    /** 开始录制一条语音消息：录音写入 WAV，同时离线识别；松开后回调 (文件路径, 时长毫秒, 识别文本)。 */
+    fun startVoiceRecording(onResult: (audioPath: String, durationMs: Int, transcript: String) -> Unit) {
+        if (recording) return
+        if (!_state.value.asrReady) {
+            _state.value = _state.value.copy(lastError = "语音识别模型未就绪，请先到设置下载")
+            return
+        }
+        val engine = asrEngine ?: run { refresh(); asrEngine }
+        if (engine == null) {
+            _state.value = _state.value.copy(lastError = "ASR 引擎未初始化")
+            return
+        }
+        recording = true
+        recordCancelled = false
+        _state.value = _state.value.copy(listening = true, partialText = "", lastError = "")
+        val file = File(context.cacheDir, "voice_${System.currentTimeMillis()}.wav")
+        voiceRecordJob = scope.launch {
+            try {
+                engine.recordToWav(
+                    outputFile = file,
+                    onPartial = { p -> _state.value = _state.value.copy(partialText = p) }
+                ) { transcript, durationMs ->
+                    recording = false
+                    _state.value = _state.value.copy(listening = false, partialText = "")
+                    if (recordCancelled) {
+                        runCatching { file.delete() }
+                    } else {
+                        onResult(file.absolutePath, durationMs, transcript)
+                    }
+                }
+            } catch (e: Exception) {
+                recording = false
+                _state.value = _state.value.copy(listening = false, lastError = "录音失败：${e.message}")
+                runCatching { file.delete() }
+            }
+        }
+    }
+
+    /** 松开结束录音并发送。 */
+    fun finishVoiceRecording() {
+        asrEngine?.stop()
+    }
+
+    /** 取消本次录音（不发送，删除临时文件）。 */
+    fun cancelVoiceRecording() {
+        recordCancelled = true
+        asrEngine?.stop()
+    }
+
+    /** 播放语音消息（WAV）。 */
+    fun playVoiceMessage(filePath: String, onDone: () -> Unit = {}) {
+        voicePlayJob?.cancel()
+        _state.value = _state.value.copy(voicePlaying = true)
+        voicePlayJob = scope.launch {
+            try {
+                playWav(File(filePath))
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(lastError = "语音播放失败：${e.message}")
+            } finally {
+                _state.value = _state.value.copy(voicePlaying = false)
+                onDone()
+            }
+        }
+    }
+
+    fun stopVoicePlayback() {
+        voicePlayJob?.cancel()
+        _state.value = _state.value.copy(voicePlaying = false)
+    }
+
+    private suspend fun playWav(file: File) {
+        val raf = RandomAccessFile(file, "r")
+        try {
+            raf.seek(24); val sampleRate = readIntLe(raf)
+            raf.seek(40); val dataSize = readIntLe(raf)
+            if (dataSize <= 0) return
+            raf.seek(44)
+            val bytes = ByteArray(dataSize)
+            raf.readFully(bytes)
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(sampleRate)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(bytes.size)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+            try {
+                track.write(bytes, 0, bytes.size)
+                track.play()
+                val durationMs = bytes.size / (sampleRate * 2)
+                delay(durationMs + 120L)
+            } finally {
+                try { track.stop() } catch (_: Exception) {}
+                track.release()
+            }
+        } finally {
+            raf.close()
+        }
+    }
+
+    private fun readIntLe(raf: RandomAccessFile): Int {
+        val b0 = raf.read().coerceAtLeast(0)
+        val b1 = raf.read().coerceAtLeast(0)
+        val b2 = raf.read().coerceAtLeast(0)
+        val b3 = raf.read().coerceAtLeast(0)
+        return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
+    }
+
     fun release() {
         stopListening()
         stopSpeaking()
+        stopVoicePlayback()
         asrEngine?.release()
         asrEngine = null
         ttsEngine?.release()

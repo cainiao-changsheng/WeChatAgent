@@ -37,7 +37,7 @@ object AgentToolRegistry {
     ): List<AgentToolSpec> = listOf(
         AgentToolSpec(
             name = "get_current_time",
-            description = "获取当前真实时间（日期、星期、时段），可用于问候和判断对方当前处于什么时间场景。",
+            description = "获取当前真实时间（日期、星期、时段）。仅在需要知道具体时间、或做早晚/时段问候时才调用；普通闲聊勿调用。",
             parameters = mapOf(
                 "type" to "object",
                 "properties" to emptyMap<String, Any>(),
@@ -61,7 +61,7 @@ object AgentToolRegistry {
         ),
         AgentToolSpec(
             name = "query_screen_time",
-            description = "查询对方（用户）今日真实屏幕使用时间：累计时长和今日使用最多的应用。仅在用户已授予「使用情况访问权限」且有数据时返回，否则返回明确提示。",
+            description = "查询对方（用户）今日真实屏幕使用时间：累计时长和今日使用最多的应用。仅在对方聊到手机/屏幕使用相关话题时才调用；普通闲聊勿调用。仅在用户已授予「使用情况访问权限」且有数据时返回，否则返回明确提示。",
             parameters = mapOf(
                 "type" to "object",
                 "properties" to emptyMap<String, Any>(),
@@ -74,7 +74,7 @@ object AgentToolRegistry {
         ),
         AgentToolSpec(
             name = "recall_memory",
-            description = "按关键词精确搜索你与该角色的长期记忆库（过去发生的事、约定、对方偏好等）。keywords 越具体命中越准；没有想好关键词时可传空，仅返回最近核心记忆。",
+            description = "按关键词精确搜索你与该角色的长期记忆库（过去发生的事、约定、对方偏好等）。仅在对方明确提到过去的事、约定或偏好时才调用；普通闲聊勿调用。keywords 越具体命中越准。",
             parameters = mapOf(
                 "type" to "object",
                 "properties" to mapOf(
@@ -92,7 +92,7 @@ object AgentToolRegistry {
         ),
         AgentToolSpec(
             name = "search_sticker",
-            description = "按语义关键词精确搜索对方自定义的图片表情，返回可用的表情名列表。聊天时想用表情（开心/生气/点赞/晚安等）就调用本工具，然后用 [表情名] 或 表情:表情名 的格式输出。",
+            description = "按语义关键词精确搜索对方自定义的图片表情，返回可用的表情名列表。仅在确实想配一张表情时才调用本工具（不是每条消息都必须用表情），找到后用 [表情名] 或 表情:表情名 的格式输出。",
             parameters = mapOf(
                 "type" to "object",
                 "properties" to mapOf(

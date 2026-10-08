@@ -84,6 +84,9 @@ class SherpaTtsEngine(private val modelDir: File) {
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                     .build()
             )
+            // MODE_STATIC 必须显式指定缓冲区大小（float 每样本 4 字节），
+            // 否则 write 时数据超过默认最小缓冲会抛 "Invalid audio buffer size"。
+            .setBufferSizeInBytes(audio.samples.size * 4)
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
         playing = true
