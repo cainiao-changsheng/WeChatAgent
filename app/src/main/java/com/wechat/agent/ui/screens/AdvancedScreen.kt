@@ -85,6 +85,7 @@ fun AdvancedScreen(
     var splitMessages by remember { mutableStateOf(initial.splitMessages) }
     var autoCollapseThinking by remember { mutableStateOf(initial.autoCollapseThinking) }
     var agentTools by remember { mutableStateOf(initial.agentTools) }
+    var singleAgentMode by remember { mutableStateOf(initial.singleAgentMode) }
 
     // 跳转菜单子配置展开状态
     var thinkExpanded by remember { mutableStateOf(false) }
@@ -116,6 +117,7 @@ fun AdvancedScreen(
         agentTools = initial.agentTools
         sendDelayText = initial.sendDelayMs.toString()
         thinkDisplay = initial.thinkDisplay
+        singleAgentMode = initial.singleAgentMode
     }
 
     // 即时保存：所有开关/输入变化时直接落库，无需底部保存按钮
@@ -131,7 +133,8 @@ fun AdvancedScreen(
                 splitMessages = splitMessages,
                 thinkDisplay = thinkDisplay,
                 autoCollapseThinking = autoCollapseThinking,
-                agentTools = agentTools
+                agentTools = agentTools,
+                singleAgentMode = singleAgentMode
             )
         )
     }
@@ -317,6 +320,14 @@ fun AdvancedScreen(
                     subtitle = "AI可主动查询当前时间、对方屏幕使用时间、记忆库后再回复；暂为一次成型回复，非逐字流式",
                     checked = agentTools,
                     onCheckedChange = { agentTools = it; saveSettings() }
+                )
+
+                // 10. 单角色模式
+                AdvancedSwitchRow(
+                    title = "单角色模式",
+                    subtitle = "开启后锁定为默认角色，隐藏新增/切换角色入口，只保留单一自我状态",
+                    checked = singleAgentMode,
+                    onCheckedChange = { singleAgentMode = it; saveSettings() }
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))

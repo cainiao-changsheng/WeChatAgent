@@ -107,6 +107,7 @@ fun AppNavigation() {
     val agentProfiles by settingsViewModel.agentProfiles.collectAsState()
     val currentAgentId by settingsViewModel.currentAgentId.collectAsState()
     val backupConfig by settingsViewModel.backupConfig.collectAsState()
+    val advancedSettings by settingsViewModel.advancedSettings.collectAsState()
 
     // 当前 AI 角色变化时，聊天数据、记忆库、朋友圈等一并切换
     LaunchedEffect(currentAgentId) {
@@ -136,6 +137,7 @@ fun AppNavigation() {
                 profiles = agentProfiles,
                 onOpenAgentDetail = { agentId -> navController.navigate("agentDetail/$agentId") },
                 onNewFriendClick = { navController.navigate("agentSetup") },
+                singleAgentMode = advancedSettings.singleAgentMode,
                 bottomBar = {
                     WeChatBottomBar(
                         currentRoute = currentRoute,

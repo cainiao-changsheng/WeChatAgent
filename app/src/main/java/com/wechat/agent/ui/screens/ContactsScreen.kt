@@ -54,6 +54,7 @@ fun ContactsScreen(
     profiles: List<AgentProfile>,
     onOpenAgentDetail: (String) -> Unit,
     onNewFriendClick: () -> Unit,
+    singleAgentMode: Boolean = false,
     bottomBar: @Composable () -> Unit = {}
 ) {
     Scaffold(
@@ -61,8 +62,10 @@ fun ContactsScreen(
             CenteredTopBar(
                 content = { Text("通讯录", fontWeight = FontWeight.Medium) },
                 actions = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Default.Add, contentDescription = "添加朋友", tint = WeChatGreen)
+                    if (!singleAgentMode) {
+                        IconButton(onClick = {}) {
+                            Icon(Icons.Default.Add, contentDescription = "添加朋友", tint = WeChatGreen)
+                        }
                     }
                 }
             )
@@ -111,8 +114,10 @@ fun ContactsScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            ContactPlaceholderRow(icon = Icons.Default.PersonAdd, title = "新的朋友", tint = Color(0xFFFA9D3B),
-                onClick = onNewFriendClick)
+            if (!singleAgentMode) {
+                ContactPlaceholderRow(icon = Icons.Default.PersonAdd, title = "新的朋友", tint = Color(0xFFFA9D3B),
+                    onClick = onNewFriendClick)
+            }
             ContactPlaceholderRow(icon = Icons.Outlined.Groups, title = "群聊", tint = WeChatGreen)
             ContactPlaceholderRow(icon = Icons.Default.Tag, title = "标签", tint = Color(0xFF576B95))
             ContactPlaceholderRow(icon = Icons.Default.ShoppingBag, title = "公众号", tint = Color(0xFF576B95))

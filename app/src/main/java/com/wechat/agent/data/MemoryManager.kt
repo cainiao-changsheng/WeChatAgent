@@ -8,6 +8,7 @@ import com.wechat.agent.data.model.MemoryType
 import com.wechat.agent.data.model.Mood
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlin.math.exp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +30,17 @@ class MemoryManager(context: Context) {
     private val appContext = context.applicationContext
     private val gson = Gson()
     private val mutex = Mutex()
+
+    companion object {
+        /** 记忆时间衰减系数（1/毫秒）：约 7 天半衰期，让陈旧记忆自然变弱。 */
+        private const val AGE_DECAY = 1.0 / (7.0 * 24 * 3600 * 1000)
+        /** 召回增强系数：最近被召回的记忆在评分上获得的额外权重上限。 */
+        private const val ACCESS_BOOST = 1.0
+        /** 召回增强的衰减系数（1/毫秒）：约 1 天后彻底消退。 */
+        private const val ACCESS_DECAY = 1.0 / (24.0 * 3600 * 1000)
+        /** 记忆重要性上限：Hebbian 强化不会无限膨胀。 */
+        private const val MAX_IMPORTANCE = 10
+    }
 
     var activeAgentId: String = SettingsManager.DEFAULT_AGENT_ID
         private set
@@ -136,19 +148,23 @@ class MemoryManager(context: Context) {
     }
 
     suspend fun buildMemoryContext(maxTokens: Int = 2000): String = mutex.withLock {
+        val now = System.currentTimeMillis()
         val sb = StringBuilder()
-        val l2 = loadMemory(MemoryType.L2_GROWTH).filter { it.importance >= 2 }.take(8)
+        // 主动竞争：按综合评分（重要性 + 时间衰减 + 召回增强）选出当前最重要的记忆
+        val l2 = loadMemory(MemoryType.L2_GROWTH).sortedByDescending { score(it, now) }.take(8)
+        val l1 = loadMemory(MemoryType.L1_DAILY).sortedByDescending { score(it, now) }.take(8)
         if (l2.isNotEmpty()) {
             sb.appendLine("【你和对方的长期记忆】")
             l2.forEach { sb.appendLine("- ${it.content}") }
             sb.appendLine()
         }
-        val l1 = loadMemory(MemoryType.L1_DAILY).take(8)
         if (l1.isNotEmpty()) {
             sb.appendLine("【今天发生的事】")
             l1.forEach { sb.appendLine("- ${it.content}") }
             sb.appendLine()
         }
+        // Hebbian：被共同召回的记忆相互增强，并刷新召回时间
+        reinforceRecalledLocked(l2 + l1, now)
         sb.toString().take(maxTokens)
     }
 
@@ -165,6 +181,7 @@ class MemoryManager(context: Context) {
             return buildMemoryContext(maxTokens = 400)
         }
         return mutex.withLock {
+            val now = System.currentTimeMillis()
             val all = buildList {
                 addAll(loadMemory(MemoryType.L2_GROWTH))
                 addAll(loadMemory(MemoryType.L1_DAILY))
@@ -175,11 +192,13 @@ class MemoryManager(context: Context) {
                     val c = e.content.lowercase()
                     kw.any { c.contains(it) || (c.length >= 2 && it.contains(c.take(2))) }
                 }
-                .sortedByDescending { it.timestamp }
+                .sortedByDescending { score(it, now) }
                 .take(maxResults)
             if (matched.isEmpty()) {
                 return@withLock "未找到与关键词「$query」相关的记忆记录。"
             }
+            // Hebbian：被共同召回的记忆相互增强，并刷新召回时间
+            reinforceRecalledLocked(matched, now)
             val sb = StringBuilder()
             sb.appendLine("【与「$query」相关的记忆】")
             matched.forEach { sb.appendLine("- ${it.content}") }
@@ -470,6 +489,44 @@ class MemoryManager(context: Context) {
             ?.filter { it.isFile && it.name.contains(activeAgentId) }
             ?.sortedByDescending { it.lastModified() }
             ?: emptyList()
+    }
+
+    /**
+     * 记忆综合评分（主动竞争网络核心）：重要性 × (时间衰减 + 召回增强)。
+     * - 时间衰减：记忆越旧越弱，约 7 天半衰期。
+     * - 召回增强：最近被召回/访问的记忆获得额外活力，约 1 天后消退。
+     * 旧数据缺失 lastAccessAt 时为 0，recencyBoost 自然退化为 1，不影响评分。
+     */
+    private fun score(e: MemoryEntry, now: Long): Double {
+        val age = (now - e.timestamp).coerceAtLeast(0L)
+        val ageDecay = exp(-AGE_DECAY * age)
+        val accessElapsed = (now - e.lastAccessAt).coerceAtLeast(0L)
+        val recencyBoost = 1.0 + ACCESS_BOOST * exp(-ACCESS_DECAY * accessElapsed)
+        return e.importance * (ageDecay + recencyBoost)
+    }
+
+    /**
+     * Hebbian 突触可塑性：被同时召回（共同激活）的记忆相互增强。
+     * 并刷新 lastAccessAt 记录召回时间，为可朽衰减提供依据。
+     * 须在已持有 mutex 锁的前提下调用（不重复加锁）。
+     */
+    private fun reinforceRecalledLocked(recalled: List<MemoryEntry>, now: Long) {
+        if (recalled.isEmpty()) return
+        val ids = recalled.map { it.id }.toSet()
+        val boost = if (ids.size > 1) 1 else 0
+        val types = setOf(MemoryType.L0_INSTANT, MemoryType.L1_DAILY, MemoryType.L2_GROWTH)
+        types.forEach { type ->
+            val list = loadMemory(type).toMutableList()
+            var changed = false
+            list.forEachIndexed { i, e ->
+                if (e.id in ids) {
+                    val newImportance = (e.importance + boost).coerceAtMost(MAX_IMPORTANCE)
+                    list[i] = e.copy(lastAccessAt = now, importance = newImportance)
+                    changed = true
+                }
+            }
+            if (changed) saveMemory(type, list)
+        }
     }
 
     private fun loadMemory(type: MemoryType): List<MemoryEntry> {

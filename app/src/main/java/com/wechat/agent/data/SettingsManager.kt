@@ -83,7 +83,9 @@ data class AdvancedSettings(
     /** 语音输入开关：开启后更多面板“语音输入”可用。 */
     val voiceInput: Boolean = true,
     /** 语音回复开关：开启后 AI 回复自动朗读。 */
-    val voiceReply: Boolean = false
+    val voiceReply: Boolean = false,
+    /** 单角色模式：开启后锁定为默认角色，隐藏新增/切换角色入口，只保留单一自我状态。 */
+    val singleAgentMode: Boolean = false
 )
 
 class SettingsManager private constructor(private val context: Context) {
@@ -192,6 +194,8 @@ class SettingsManager private constructor(private val context: Context) {
     }
 
     fun setCurrentAgentId(id: String) {
+        // 单角色模式：锁定为默认角色，拒绝切换到其他角色
+        if (_advancedSettings.value.singleAgentMode && id != DEFAULT_AGENT_ID) return
         profilePrefs.edit().putString("current_agent_id", id).apply()
         _currentAgentId.value = id
     }
@@ -305,6 +309,7 @@ class SettingsManager private constructor(private val context: Context) {
             .putBoolean("adv_think_display", settings.thinkDisplay)
             .putBoolean("adv_auto_collapse_think", settings.autoCollapseThinking)
             .putBoolean("adv_agent_tools", settings.agentTools)
+            .putBoolean("adv_single_agent", settings.singleAgentMode)
             .apply()
         _advancedSettings.value = settings.copy(
             sendDelayMs = settings.sendDelayMs.coerceIn(0, 60000)
@@ -326,7 +331,8 @@ class SettingsManager private constructor(private val context: Context) {
             autoCollapseThinking = profilePrefs.getBoolean("adv_auto_collapse_think", false),
             agentTools = profilePrefs.getBoolean("adv_agent_tools", true),
             voiceInput = profilePrefs.getBoolean("adv_voice_input", true),
-            voiceReply = profilePrefs.getBoolean("adv_voice_reply", false)
+            voiceReply = profilePrefs.getBoolean("adv_voice_reply", false),
+            singleAgentMode = profilePrefs.getBoolean("adv_single_agent", false)
         )
     }
 
