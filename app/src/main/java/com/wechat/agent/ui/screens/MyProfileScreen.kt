@@ -15,19 +15,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -131,12 +127,12 @@ fun MyProfileScreen(
                 onClick = onOpenMoments
             )
             ProfileMenuRow(
-                icon = { Icon(Icons.Default.Settings, contentDescription = "设置", tint = Color(0xFF576B95)) },
+                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "设置", tint = Color(0xFF7C4DFF)) },
                 title = "设置",
                 onClick = onOpenSettings
             )
             ProfileMenuRow(
-                icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "高级", tint = Color(0xFF7C4DFF)) },
+                icon = { Icon(Icons.Default.Settings, contentDescription = "高级", tint = Color(0xFF576B95)) },
                 title = "高级",
                 onClick = onOpenAdvanced
             )

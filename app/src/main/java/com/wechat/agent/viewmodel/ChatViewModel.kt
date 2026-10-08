@@ -1583,16 +1583,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (chatId != null) syncChatInList(chatId, updated.lastOrNull()?.content ?: "", updated)
     }
 
-    /** 切换某条消息「转文字」显示状态（语音气泡 ↔ 文本）。 */
-    fun setMessageVoiceToText(messageId: String, voiceToText: Boolean) {
-        val updated = _currentMessages.value.map {
-            if (it.id == messageId) it.copy(voiceToText = voiceToText) else it
-        }
-        _currentMessages.value = updated
-        val chatId = _currentChatId.value
-        if (chatId != null) syncChatInList(chatId, updated.lastOrNull()?.content ?: "", updated)
-    }
-
     fun deleteChat(chatId: String) {
         _chats.value = _chats.value.filter { it.id != chatId }
         if (_currentChatId.value == chatId) { _currentChatId.value = null; _currentMessages.value = emptyList() }

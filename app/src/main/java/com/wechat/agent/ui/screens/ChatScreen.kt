@@ -50,10 +50,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.EmojiEmotions
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
@@ -98,9 +101,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -155,8 +156,7 @@ fun ChatScreen(
     onOpenMusicApp: () -> Unit = {},
     onAvatarClick: () -> Unit = {},
     onTypingChange: (Boolean) -> Unit = {},
-    onUpdateMessageAudio: (String, String, Int) -> Unit = { _, _, _ -> },
-    onMessageToText: (String) -> Unit = {}
+    onUpdateMessageAudio: (String, String, Int) -> Unit = { _, _, _ -> }
 ) {
     var inputText by remember { mutableStateOf("") }
     var showEmojiPanel by remember { mutableStateOf(false) }
@@ -485,7 +485,6 @@ fun ChatScreen(
                     agentAvatarUri = agentAvatarUri, userAvatarUri = userAvatarUri,
                     autoCollapseThinking = advSettings.autoCollapseThinking,
                     onPlayVoice = handlePlayVoice,
-                    onToText = { onMessageToText(it.id) },
                     onQuote = handleQuote)
             }
             if (advSettings.thinkDisplay && streamingReasoning.isNotEmpty()) {
@@ -625,7 +624,6 @@ fun MessageBubble(
     userAvatarUri: String = "",
     autoCollapseThinking: Boolean = false,
     onPlayVoice: (Message, String) -> Unit = { _, _ -> },
-    onToText: (Message) -> Unit = {},
     onQuote: (String) -> Unit = {}
 ) {
     val isUser = message.role == Role.USER
@@ -644,12 +642,6 @@ fun MessageBubble(
         parseStickerContent(message.content, stickerList)
     }
     val displayText = if (isUser) message.content else (parsed?.text ?: message.content)
-    // 模型回复默认展示为语音气泡（点击 TTS 朗读，长按可转文字）；错误/图片/流式消息仍按文本/图片展示
-    val showAgentVoice = !isUser && !message.voiceToText &&
-        message.imageUri.isBlank() && parsed?.images.isNullOrEmpty() &&
-        message.status == MessageStatus.SENT && displayText.isNotBlank()
-    val estimatedMs = ((displayText.length * 1000L) / 4).coerceAtLeast(800).toInt()
-    val voiceDurationMs = if (message.audioDurationMs > 0) message.audioDurationMs else estimatedMs
     var showMenu by remember { mutableStateOf(false) }
     var showSelect by remember { mutableStateOf(false) }
     fun copyText() {
@@ -657,9 +649,6 @@ fun MessageBubble(
         clipboard.setPrimaryClip(ClipData.newPlainText("消息", displayText))
         Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
     }
-    // 记录正文气泡实际宽度（像素），用于思考气泡水平中点与正文气泡中点对齐
-    var bodyWidthPx by remember { mutableStateOf(0) }
-    val density = LocalDensity.current
 
     AnimatedVisibility(visible = true, enter = fadeIn() + slideInVertically(initialOffsetY = { it / 8 })) {
         // AI 消息：思考气泡与正文气泡上下排列，二者水平中点对齐（思考气泡整体位于头像右侧的正文区域上方）
@@ -689,16 +678,8 @@ fun MessageBubble(
 
             Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start,
                 modifier = Modifier.widthIn(max = 280.dp)) {
-                if (!isUser && message.thinking.orEmpty().isNotEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .widthIn(max = 280.dp)
-                            .then(if (bodyWidthPx > 0) Modifier.width(with(density) { bodyWidthPx.toDp() }) else Modifier),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        ThinkingBubble(reasoning = message.thinking.orEmpty(), autoCollapsed = autoCollapseThinking, isDark = isDark)
-                    }
+                if (!isUser && message.thinking.isNotBlank()) {
+                    ThinkingBubble(reasoning = message.thinking, autoCollapsed = autoCollapseThinking, isDark = isDark)
                     Spacer(modifier = Modifier.height(4.dp))
                 }
                 if (message.imageUri.isNotEmpty()) {
@@ -731,15 +712,6 @@ fun MessageBubble(
                     Spacer(modifier = Modifier.height(4.dp))
                 }
                 when {
-                    showAgentVoice -> {
-                        AgentVoiceBubble(
-                            durationMs = voiceDurationMs,
-                            bubbleColor = bubbleColor,
-                            isDark = isDark,
-                            onClick = { onPlayVoice(message, displayText) },
-                            onLongPress = { showMenu = true }
-                        )
-                    }
                     isUser && message.audioUri.isNotEmpty() -> {
                         VoiceMessageBubble(
                             audioUri = message.audioUri,
@@ -751,10 +723,10 @@ fun MessageBubble(
                     displayText.isNotEmpty() -> {
                         Box(
                             modifier = Modifier
-                                .onGloballyPositioned { coordinates ->
-                                    if (coordinates.size.width > 0) bodyWidthPx = coordinates.size.width
-                                }
-                                .combinedClickable(onClick = {}, onLongClick = { showMenu = true })
+                                .combinedClickable(
+                                    onClick = {},
+                                    onLongClick = if (isUser) { { showMenu = true } } else null
+                                )
                                 .clip(RoundedCornerShape(
                                 topStart = if (isUser) 16.dp else 4.dp, topEnd = if (isUser) 4.dp else 16.dp,
                                 bottomStart = 16.dp, bottomEnd = 16.dp))
@@ -764,6 +736,14 @@ fun MessageBubble(
                                 displayText,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = if (isUser && !isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface)
+                        }
+                        if (!isUser) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            AgentActionBar(
+                                onCopy = { copyText() },
+                                onPlayVoice = { onPlayVoice(message, displayText) },
+                                onQuote = { onQuote(displayText) }
+                            )
                         }
                     }
                 }
@@ -798,22 +778,17 @@ fun MessageBubble(
         }
     }
 
-    // 长按气泡弹出的操作菜单：语音气泡 → 转文字/引用；文字气泡 → 复制/选择/播放语音/引用
+    // 用户文本气泡长按弹出的操作菜单：复制 / 选择 / 播放语音 / 引用
     if (showMenu) {
         AlertDialog(
             onDismissRequest = { showMenu = false },
             title = { Text("消息操作") },
             text = {
                 Column {
-                    if (showAgentVoice) {
-                        BubbleMenuRow("转文字") { onToText(message); showMenu = false }
-                        BubbleMenuRow("引用") { onQuote(displayText); showMenu = false }
-                    } else {
-                        BubbleMenuRow("复制") { copyText(); showMenu = false }
-                        BubbleMenuRow("选择") { showMenu = false; showSelect = true }
-                        BubbleMenuRow("播放语音") { onPlayVoice(message, displayText); showMenu = false }
-                        BubbleMenuRow("引用") { onQuote(displayText); showMenu = false }
-                    }
+                    BubbleMenuRow("复制") { copyText(); showMenu = false }
+                    BubbleMenuRow("选择") { showMenu = false; showSelect = true }
+                    BubbleMenuRow("播放语音") { onPlayVoice(message, displayText); showMenu = false }
+                    BubbleMenuRow("引用") { onQuote(displayText); showMenu = false }
                 }
             },
             confirmButton = {},
@@ -845,41 +820,44 @@ private fun BubbleMenuRow(label: String, onClick: () -> Unit) {
     }
 }
 
-/** 模型回复的语音气泡：播放图标 + 秒数，点击 TTS 朗读，长按转文字。 */
-@OptIn(ExperimentalFoundationApi::class)
+/** 模型回复气泡底部操作栏：复制 / 播放语音 / 引用，从左到右排列。 */
 @Composable
-private fun AgentVoiceBubble(
-    durationMs: Int,
-    bubbleColor: Color,
-    isDark: Boolean,
-    onClick: () -> Unit,
-    onLongPress: () -> Unit
+private fun AgentActionBar(
+    onCopy: () -> Unit,
+    onPlayVoice: () -> Unit,
+    onQuote: () -> Unit
 ) {
-    val seconds = maxOf(1, (durationMs + 500) / 1000)
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(bubbleColor)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { onClick() },
-                    onLongPress = { onLongPress() }
-                )
-            }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        AgentActionIcon(Icons.Default.ContentCopy, "复制", onCopy)
+        AgentActionIcon(Icons.Default.VolumeUp, "播放语音", onPlayVoice)
+        AgentActionIcon(Icons.AutoMirrored.Filled.Reply, "引用", onQuote)
+    }
+}
+
+/** 圆形操作图标按钮。 */
+@Composable
+private fun AgentActionIcon(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(32.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
         Icon(
-            Icons.Default.PlayArrow,
-            contentDescription = "播放",
-            tint = if (!isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Text(
-            "$seconds″",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (!isDark) Color(0xFF111111) else MaterialTheme.colorScheme.onSurface
+            icon,
+            contentDescription = contentDescription,
+            tint = WeChatGreen,
+            modifier = Modifier.size(17.dp)
         )
     }
 }

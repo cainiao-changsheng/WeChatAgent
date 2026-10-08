@@ -298,8 +298,7 @@ fun AppNavigation() {
                 onTypingChange = { chatViewModel.setUserTyping(it) },
                 onUpdateMessageAudio = { id, uri, durationMs ->
                     chatViewModel.updateMessageAudio(id, uri, durationMs)
-                },
-                onMessageToText = { chatViewModel.setMessageVoiceToText(it, true) }
+                }
             )
         }
 
